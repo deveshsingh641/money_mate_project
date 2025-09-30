@@ -1,0 +1,12 @@
+# Handle line endings automatically
+* text=auto
+
+# Flutter/Dart files should always use LF
+*.dart text eol=lf
+
+# Gradle and Kotlin scripts should use LF
+*.gradle text eol=lf
+*.kts text eol=lf
+
+# JSON files should use LF
+*.json text eol=lf
