@@ -3,6 +3,12 @@ description: "A new Flutter project."
 publish_to: 'none'
 version: 1.0.0+1
 
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "C:/Users/user/StudioProjects/money_mate/lib/assets/final-image.jpg"
+  min_sdk_android: 21
+
 environment:
   sdk: '>=3.4.0 <4.0.0'
 
@@ -27,6 +33,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: "^0.13.1"
+  http: ^1.1.0
 
 flutter:
   uses-material-design: true
