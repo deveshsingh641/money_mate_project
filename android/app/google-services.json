@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "507728474590-isi4b13avubadi9737jr4vrldh7jn226.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.money_mate",
+            "certificate_hash": "ebcecf282cc501afdb2fd0a684383e3d021c385b"
+          }
+        },
+        {
           "client_id": "507728474590-mpmqku7rf232mtea60ojg1ajbrl0b8b5.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -29,6 +37,13 @@
             {
               "client_id": "507728474590-mpmqku7rf232mtea60ojg1ajbrl0b8b5.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "507728474590-fha1e0dv0qc0a5b9t16tuv1h81cinbvd.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.moneyMate"
+              }
             }
           ]
         }

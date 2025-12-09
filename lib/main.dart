@@ -1,14 +1,49 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
+import 'dart:io';
 import 'package:intl/intl.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
-import 'dart:math' as math; // For generating unique IDs
+import 'package:share_plus/share_plus.dart';
+
+import 'dart:math' as math;
 
 import 'firebase_options.dart';
+import 'models/transaction.dart';
+import 'models/asset.dart';
+import 'models/liability.dart';
+import 'models/goal.dart';
+import 'models/bill.dart';
+import 'models/achievement.dart';
+import 'models/challenge.dart';
+import 'models/shared_wallet.dart';
+import 'providers/transaction_manager.dart';
+import 'screens/dashboard/dashboard_content.dart';
+import 'widgets/primary_card.dart';
+import 'widgets/status_chip.dart';
+
+class ThemeManager extends ChangeNotifier {
+  ThemeMode _themeMode = ThemeMode.light;
+
+  ThemeMode get themeMode => _themeMode;
+
+  void setThemeMode(ThemeMode mode) {
+    if (_themeMode == mode) return;
+    _themeMode = mode;
+    notifyListeners();
+  }
+
+  void toggleTheme(bool isDark) {
+    setThemeMode(isDark ? ThemeMode.dark : ThemeMode.light);
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,8 +51,11 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => TransactionManager(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => TransactionManager()),
+        ChangeNotifierProvider(create: (context) => ThemeManager()),
+      ],
       child: const MyApp(),
     ),
   );
@@ -28,455 +66,142 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Money-Mate',
-      theme: ThemeData(
-        primarySwatch: Colors.teal,
-        scaffoldBackgroundColor: const Color(0xFFF0F2F5),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          elevation: 0,
-          centerTitle: true,
-        ),
-        useMaterial3: true,
-      ),
-      home: const LoginPage(),
+    return Consumer<ThemeManager>(
+      builder: (context, themeManager, _) {
+        return MaterialApp(
+          title: 'Money-Mate',
+          themeMode: themeManager.themeMode,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF00F289),
+              primary: const Color(0xFF00F289),
+              secondary: const Color(0xFF22D3EE),
+              background: const Color(0xFF020617),
+              surface: const Color(0xFF020617),
+              brightness: Brightness.dark,
+            ),
+            scaffoldBackgroundColor: const Color(0xFF020617),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Colors.transparent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              centerTitle: true,
+              titleTextStyle: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            cardTheme: CardThemeData(
+              color: const Color(0xFF020617),
+              elevation: 6,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00F289),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            outlinedButtonTheme: OutlinedButtonThemeData(
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                side: const BorderSide(color: Color(0xFF1F2937)),
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            inputDecorationTheme: InputDecorationTheme(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide:
+                    const BorderSide(color: Color(0xFF1F2937), width: 1),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide:
+                    const BorderSide(color: Color(0xFF1F2937), width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(
+                  color: Color(0xFF00F289),
+                  width: 1.8,
+                ),
+              ),
+              filled: true,
+              fillColor: const Color(0xFF020617),
+            ),
+            bottomNavigationBarTheme: BottomNavigationBarThemeData(
+              backgroundColor: const Color(0xFF020617),
+              selectedItemColor: const Color(0xFF00F289),
+              unselectedItemColor: Colors.grey.shade500,
+              selectedIconTheme: const IconThemeData(size: 26),
+              unselectedIconTheme: const IconThemeData(size: 22),
+              type: BottomNavigationBarType.fixed,
+              elevation: 16,
+            ),
+            textTheme: const TextTheme(
+              headlineSmall: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+              titleMedium: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+              bodyMedium: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: Color(0xFFE5E7EB),
+              ),
+              bodySmall: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: Color(0xFF9CA3AF),
+              ),
+            ),
+          ),
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF14B8A6),
+              brightness: Brightness.dark,
+            ),
+          ),
+          home: StreamBuilder<User?>(
+            stream: FirebaseAuth.instance.authStateChanges(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (snapshot.hasData) {
+                return const HomeScreen();
+              }
+              return const LoginPage();
+            },
+          ),
+        );
+      },
     );
-  }
-}
-
-// --- Data Models and Manager ---
-
-enum TransactionType { income, expense }
-enum ExpenseCategory { food, transport, bills, entertainment, salary, gift, other }
-
-extension ExpenseCategoryExtension on ExpenseCategory {
-  String get emoji {
-    switch (this) {
-      case ExpenseCategory.food:
-        return '🍔';
-      case ExpenseCategory.transport:
-        return '🚗';
-      case ExpenseCategory.bills:
-        return '🧾';
-      case ExpenseCategory.entertainment:
-        return '🎬';
-      case ExpenseCategory.salary:
-        return '💼';
-      case ExpenseCategory.gift:
-        return '🎁';
-      case ExpenseCategory.other:
-        return '💰';
-      default:
-        return '❓';
-    }
-  }
-
-  String get displayName {
-    switch (this) {
-      case ExpenseCategory.food:
-        return 'Food';
-      case ExpenseCategory.transport:
-        return 'Transport';
-      case ExpenseCategory.bills:
-        return 'Bills';
-      case ExpenseCategory.entertainment:
-        return 'Entertainment';
-      case ExpenseCategory.salary:
-        return 'Salary';
-      case ExpenseCategory.gift:
-        return 'Gift';
-      case ExpenseCategory.other:
-        return 'Other';
-      default:
-        return 'Unknown';
-    }
-  }
-}
-
-enum AssetType { savings, investment, property }
-enum LiabilityType { mortgage, loan, creditCard }
-
-class Transaction {
-  final String id;
-  final double amount;
-  final ExpenseCategory category;
-  final TransactionType type;
-  final DateTime date;
-  final String description;
-
-  Transaction({
-    required this.id,
-    required this.amount,
-    required this.category,
-    required this.type,
-    required this.date,
-    required this.description,
-  });
-}
-
-// FIX: Improved error handling and robust type casting for Firestore data
-Transaction transactionFromFirestore(DocumentSnapshot doc) {
-  final data = doc.data() as Map<String, dynamic>?;
-
-  if (data == null) {
-    throw Exception("Document data is null for ID: ${doc.id}");
-  }
-
-  final amountValue = data['amount'];
-  final dateValue = data['date'];
-
-  return Transaction(
-    id: doc.id,
-    // Robustly cast any number type (int, double) from Firestore to double
-    amount: (amountValue is num) ? amountValue.toDouble() : 0.0,
-    category: ExpenseCategory.values.byName(data['category'] as String),
-    type: TransactionType.values.byName(data['type'] as String),
-    // Check if it's a Firestore Timestamp and convert to DateTime
-    date: (dateValue is Timestamp) ? dateValue.toDate() : DateTime.now(),
-    description: data['description'] as String,
-  );
-}
-
-class Asset {
-  final String name;
-  final double value;
-  final AssetType type;
-  Asset({required this.name, required this.value, required this.type});
-}
-
-class Liability {
-  final String name;
-  final double amount;
-  final LiabilityType type;
-  Liability({required this.name, required this.amount, required this.type});
-}
-
-class Goal {
-  final String id;
-  final String name;
-  final double targetAmount;
-  final double currentAmount;
-  final DateTime deadline;
-
-  Goal({
-    required this.id,
-    required this.name,
-    required this.targetAmount,
-    required this.currentAmount,
-    required this.deadline,
-  });
-
-  Goal copyWith({
-    String? id,
-    String? name,
-    double? targetAmount,
-    double? currentAmount,
-    DateTime? deadline,
-  }) {
-    return Goal(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      targetAmount: targetAmount ?? this.targetAmount,
-      currentAmount: currentAmount ?? this.currentAmount,
-      deadline: deadline ?? this.deadline,
-    );
-  }
-}
-
-class Bill {
-  final String id;
-  final String name;
-  final double amount;
-  final DateTime dueDate;
-  final bool isPaid;
-
-  Bill({
-    required this.id,
-    required this.name,
-    required this.amount,
-    required this.dueDate,
-    this.isPaid = false,
-  });
-
-  Bill copyWith({
-    String? id,
-    String? name,
-    double? amount,
-    DateTime? dueDate,
-    bool? isPaid,
-  }) {
-    return Bill(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      amount: amount ?? this.amount,
-      dueDate: dueDate ?? this.dueDate,
-      isPaid: isPaid ?? this.isPaid,
-    );
-  }
-}
-
-class Achievement {
-  final String id;
-  final String title;
-  final String description;
-  final IconData icon;
-  final bool isUnlocked;
-
-  Achievement({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.icon,
-    this.isUnlocked = false,
-  });
-
-  Achievement copyWith({
-    String? id,
-    String? title,
-    String? description,
-    IconData? icon,
-    bool? isUnlocked,
-  }) {
-    return Achievement(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      description: description ?? this.description,
-      icon: icon ?? this.icon,
-      isUnlocked: isUnlocked ?? this.isUnlocked,
-    );
-  }
-}
-
-class Challenge {
-  final String title;
-  final String description;
-  final double progress;
-  final double target;
-
-  Challenge({
-    required this.title,
-    required this.description,
-    required this.progress,
-    required this.target,
-  });
-}
-
-class SharedWallet {
-  final String id;
-  final String name;
-  final List<String> members;
-  final double balance;
-
-  SharedWallet({
-    required this.id,
-    required this.name,
-    required this.members,
-    required this.balance,
-  });
-}
-
-class TransactionManager extends ChangeNotifier {
-  final CollectionReference _transactionsCollection =
-  FirebaseFirestore.instance.collection('transactions');
-  final CollectionReference _goalsCollection =
-  FirebaseFirestore.instance.collection('goals');
-  final CollectionReference _billsCollection =
-  FirebaseFirestore.instance.collection('bills');
-
-  // --- Transactions Stream (Dynamic) ---
-  Stream<List<Transaction>> get transactionsStream {
-    return _transactionsCollection.orderBy('date', descending: true).snapshots().map(
-          (snapshot) => snapshot.docs.map(transactionFromFirestore).toList(),
-    );
-  }
-
-  Future<void> addTransaction(Transaction transaction) {
-    return _transactionsCollection.add({
-      'amount': transaction.amount,
-      'category': transaction.category.name,
-      'type': transaction.type.name,
-      // FIX: Ensure date is stored as Firestore Timestamp
-      'date': Timestamp.fromDate(transaction.date),
-      'description': transaction.description,
-    }).then((_) {
-      // Notifying listeners in case other non-stream data is watching
-      notifyListeners();
-    });
-  }
-
-  // --- Dynamic Dashboard Data Calculations (STREAMS) ---
-
-  // FIX: Convert to Stream for real-time dashboard updates
-  Stream<double> get totalBalanceStream {
-    return transactionsStream.map((transactions) {
-      final income = transactions.where((t) => t.type == TransactionType.income).fold<double>(0.0, (sum, item) => sum + item.amount);
-      final expense = transactions.where((t) => t.type == TransactionType.expense).fold<double>(0.0, (sum, item) => sum + item.amount);
-      return income - expense;
-    });
-  }
-
-  // FIX: Convert to Stream for real-time dashboard updates
-  Stream<double> get monthlyExpenseStream {
-    return transactionsStream.map((transactions) {
-      final now = DateTime.now();
-      final startOfMonth = DateTime(now.year, now.month, 1);
-      return transactions
-          .where((t) => t.type == TransactionType.expense)
-          .where((t) => t.date.isAfter(startOfMonth) || t.date.isAtSameMomentAs(startOfMonth))
-          .fold<double>(0.0, (sum, item) => sum + item.amount);
-    });
-  }
-
-  // Legacy Future properties (still used by some existing widgets)
-  Future<double> get totalBalance => totalBalanceStream.first;
-  Future<double> get monthlyExpense => monthlyExpenseStream.first;
-
-  Future<double> get previousMonthlyExpense async {
-    return 0.0;
-  }
-
-  Future<List<double>> get historicalMonthlyExpense async {
-    return [];
-  }
-
-  // FIX: Convert to Stream for real-time dashboard updates
-  Stream<Map<ExpenseCategory, double>> get expensesByCategoryStream {
-    return transactionsStream.map((transactions) {
-      final expenseTransactions = transactions.where((t) => t.type == TransactionType.expense);
-      final categoryMap = <ExpenseCategory, double>{};
-      for (var category in ExpenseCategory.values) {
-        if (category != ExpenseCategory.salary && category != ExpenseCategory.gift) {
-          final total = expenseTransactions
-              .where((t) => t.category == category)
-              .fold<double>(0.0, (sum, item) => sum + item.amount);
-          if (total > 0) {
-            categoryMap[category] = total;
-          }
-        }
-      }
-      return categoryMap;
-    });
-  }
-
-  Future<Map<ExpenseCategory, double>> get expensesByCategory async => expensesByCategoryStream.first;
-
-
-  // Assets and Liabilities (Set to Empty/Zero)
-  final List<Asset> _assets = [];
-  final List<Liability> _liabilities = [];
-  double get totalAssets => _assets.fold(0.0, (sum, item) => sum + item.value);
-  double get totalLiabilities => _liabilities.fold(0.0, (sum, item) => sum + item.amount);
-  double get netWorth => totalAssets - totalLiabilities;
-  List<double> get historicalNetWorth => [];
-  String get predictiveInsight => 'Add your first transaction to see insights!';
-
-  // Goals (Set to Empty List - Fully Dynamic)
-  final List<Goal> _goals = [];
-  List<Goal> get goals => _goals;
-
-  void addGoal(Goal newGoal) {
-    _goals.add(newGoal);
-    notifyListeners();
-  }
-
-  void removeGoal(String id) {
-    _goals.removeWhere((goal) => goal.id == id);
-    notifyListeners();
-  }
-
-  // Bills (Set to Empty List - Fully Dynamic)
-  List<Bill> _bills = [];
-  List<Bill> get bills => _bills;
-
-  void addBill(Bill newBill) {
-    _bills.add(newBill);
-    notifyListeners();
-  }
-
-  void togglePaidStatus(String billId) {
-    final index = _bills.indexWhere((bill) => bill.id == billId);
-    if (index != -1) {
-      _bills[index] = _bills[index].copyWith(isPaid: !_bills[index].isPaid);
-      if (_bills[index].isPaid) {
-        unlockAchievement('a4');
-      }
-      notifyListeners();
-    }
-  }
-
-  void removeBill(String id) {
-    _bills.removeWhere((bill) => bill.id == id);
-    notifyListeners();
-  }
-
-  Future<void> togglePaidStatusInFirestore(String billId, bool isPaid) {
-    return Future.value();
-  }
-
-  // Achievements (Retain static definitions as metadata, but set unlocked to false)
-  List<Achievement> _achievements = [
-    Achievement(id: 'a1', title: 'First Steps', description: 'Log your first transaction', icon: Icons.rocket_launch_rounded, isUnlocked: false),
-    Achievement(id: 'a2', title: 'Budget Master', description: 'Stay within budget for 30 days', icon: Icons.military_tech_rounded, isUnlocked: false),
-    Achievement(id: 'a3', title: 'Power Saver', description: 'Save ₹50,000 for a goal', icon: Icons.savings_rounded, isUnlocked: false),
-    Achievement(id: 'a4', title: 'Bill Slayer', description: 'Pay 3 bills on time', icon: Icons.receipt_long_rounded, isUnlocked: false),
-  ];
-
-  List<Achievement> get achievements => _achievements;
-
-  void unlockAchievement(String id) {
-    final index = _achievements.indexWhere((a) => a.id == id);
-    if (index != -1 && !_achievements[index].isUnlocked) {
-      _achievements[index] = _achievements[index].copyWith(isUnlocked: true);
-      notifyListeners();
-    }
-  }
-
-  void toggleAchievement(String id) {
-    final index = _achievements.indexWhere((a) => a.id == id);
-    if (index != -1) {
-      _achievements[index] = _achievements[index].copyWith(isUnlocked: !_achievements[index].isUnlocked);
-      notifyListeners();
-    }
-  }
-
-  // Challenges (Static for definition, progress can be dynamic)
-  final List<Challenge> _challenges = [
-    Challenge(title: 'No-Spend Day', description: 'Avoid any expenses today', progress: 0.0, target: 1.0),
-    Challenge(title: 'Reduce Food Spending', description: 'Cut food expenses by 10% this week', progress: 0.0, target: 1.0),
-  ];
-
-  // Shared Wallets (Set to Empty List - Fully Dynamic)
-  final List<SharedWallet> _sharedWallets = [];
-  List<SharedWallet> get sharedWallets => _sharedWallets;
-
-  void addSharedWallet(SharedWallet newWallet) {
-    _sharedWallets.add(newWallet);
-    notifyListeners();
-  }
-
-  void removeSharedWallet(String id) {
-    _sharedWallets.removeWhere((wallet) => wallet.id == id);
-    notifyListeners();
-  }
-
-  List<Challenge> get challenges => _challenges;
-
-  Future<double> convertCurrency(double amount, String from, String to) async {
-    if (from == 'USD' && to == 'INR') {
-      return amount * 82.5;
-    }
-    return amount;
-  }
-
-  Map<String, double> splitBill(double totalAmount, List<String> members) {
-    final splitAmount = totalAmount / members.length;
-    final Map<String, double> owedAmounts = {};
-    for (var member in members) {
-      owedAmounts[member] = splitAmount;
-    }
-    return owedAmounts;
   }
 }
 
@@ -494,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final PageController _pageController = PageController();
 
-  final List<Widget> _widgetOptions = const <Widget>[
+  final List<Widget> _widgetOptions = <Widget>[
     DashboardContent(),
     GoalsPage(),
     BillPage(),
@@ -526,25 +251,139 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDashboard = _selectedIndex == 0;
+    final user = FirebaseAuth.instance.currentUser;
+    final displayName =
+        user?.displayName ?? user?.email ?? user?.phoneNumber ?? 'Money Mate';
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_appBarTitles[_selectedIndex]),
-        actions: [
-          if (_selectedIndex == 0)
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline, color: Colors.teal),
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const AddTransactionOptionsPage()),
-                );
-              },
-            ),
-        ],
-      ),
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: _onPageChanged,
-        children: _widgetOptions,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF00F289),
+              Color(0xFF020617),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Custom header similar to PhonePe/Paytm
+              if (isDashboard)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Good Evening,',
+                              style: theme.textTheme.bodySmall),
+                          const SizedBox(height: 4),
+                          Text(displayName,
+                              style: theme.textTheme.headlineSmall),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            style: IconButton.styleFrom(
+                              backgroundColor:
+                                  theme.colorScheme.primary.withOpacity(0.08),
+                            ),
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (ctx) =>
+                                      const AddTransactionOptionsPage(),
+                                ),
+                              );
+                            },
+                            icon: Icon(
+                              Icons.add,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (ctx) => const ProfileScreen(),
+                                ),
+                              );
+                            },
+                            child: Builder(
+                              builder: (context) {
+                                final initials = displayName.isNotEmpty
+                                    ? displayName
+                                        .trim()
+                                        .split(' ')
+                                        .where((p) => p.isNotEmpty)
+                                        .take(2)
+                                        .map((p) => p[0].toUpperCase())
+                                        .join()
+                                    : 'MM';
+
+                                if (user?.photoURL != null) {
+                                  return CircleAvatar(
+                                    radius: 18,
+                                    backgroundImage:
+                                        NetworkImage(user!.photoURL!),
+                                  );
+                                }
+
+                                return CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: theme.colorScheme.primary
+                                      .withOpacity(0.12),
+                                  child: Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _appBarTitles[_selectedIndex],
+                        style: theme.textTheme.headlineSmall,
+                      ),
+                      const SizedBox.shrink(),
+                    ],
+                  ),
+                ),
+
+              // Page content
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: _onPageChanged,
+                  children: _widgetOptions,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
@@ -570,2066 +409,901 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
         currentIndex: _selectedIndex,
-        selectedItemColor: Colors.teal.shade700,
-        unselectedItemColor: Colors.grey.shade600,
-        backgroundColor: Colors.white,
-        elevation: 10,
-        type: BottomNavigationBarType.fixed,
         onTap: _onItemTapped,
       ),
     );
   }
 }
 
-// --- Dashboard Content (FULLY DYNAMIC) ---
-class DashboardContent extends StatelessWidget {
-  const DashboardContent({super.key});
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 24.0, bottom: 8.0),
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
-      ),
-    );
+IconData _billIconForName(String name) {
+  final lower = name.toLowerCase();
+  if (lower.contains('electric') || lower.contains('power')) {
+    return Icons.flash_on_rounded;
   }
-
-  Widget _buildEmptyChartPlaceholder(String title) {
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        height: 200,
-        padding: const EdgeInsets.all(20.0),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.bar_chart_rounded, size: 40, color: Colors.grey.shade400),
-              const SizedBox(height: 8),
-              const Text(
-                'Add more data to see this trend.',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  if (lower.contains('rent') ||
+      lower.contains('house') ||
+      lower.contains('home')) {
+    return Icons.home_work_rounded;
   }
-
-  Widget _buildLineChart(List<double> data) {
-    if (data.isEmpty) return _buildEmptyChartPlaceholder('Trend');
-
-    final maxY = data.reduce((a, b) => a > b ? a : b) * 1.1;
-    final minY = data.reduce((a, b) => a < b ? a : b) * 0.9;
-    final spots = data.asMap().entries.map((entry) => FlSpot(entry.key.toDouble(), entry.value / 1000.0)).toList();
-
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 20, 20, 10),
-        child: LineChart(
-          LineChartData(
-            minY: minY / 1000.0,
-            maxY: maxY / 1000.0,
-            gridData: FlGridData(
-              show: true,
-              drawVerticalLine: false,
-              horizontalInterval: 5,
-              getDrawingHorizontalLine: (value) => FlLine(
-                color: Colors.grey.shade300,
-                strokeWidth: 1,
-              ),
-            ),
-            titlesData: FlTitlesData(
-              show: true,
-              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              bottomTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 30,
-                  interval: 1,
-                  getTitlesWidget: (value, meta) {
-                    final monthIndex = value.toInt();
-                    // Just show indices since we don't have historical month data
-                    final text = monthIndex.toString();
-                    const style = TextStyle(color: Colors.grey, fontSize: 12);
-                    return Padding(padding: const EdgeInsets.only(top: 8.0), child: Text(text, style: style));
-                  },
-                ),
-              ),
-              leftTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 40,
-                  interval: 5,
-                  getTitlesWidget: (value, meta) => Text("₹${value.toInt()}K", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                ),
-              ),
-            ),
-            borderData: FlBorderData(
-              show: true,
-              border: Border.all(color: Colors.grey.shade300, width: 1),
-            ),
-            lineBarsData: [
-              LineChartBarData(
-                spots: spots,
-                isCurved: true,
-                color: Colors.teal.shade500,
-                gradient: LinearGradient(colors: [Colors.teal.shade300!.withOpacity(0.5), Colors.white.withOpacity(0.0)]),
-                barWidth: 4,
-                belowBarData: BarAreaData(
-                  show: true,
-                  gradient: LinearGradient(
-                    colors: [Colors.teal.shade100!.withAlpha(128), Colors.white.withAlpha(0)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-                dotData: const FlDotData(show: true),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  if (lower.contains('sub') ||
+      lower.contains('netflix') ||
+      lower.contains('prime')) {
+    return Icons.subscriptions_rounded;
   }
-
-  Widget _buildExpenseBarChart(BuildContext context, Map<ExpenseCategory, double> expenses) {
-    final sortedExpenses = expenses.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-
-    if (sortedExpenses.isEmpty) return _buildEmptyChartPlaceholder('Spending Breakdown');
-
-    const List<Color> barColors = [
-      Color(0xFF1ABC9C),
-      Color(0xFF3498DB),
-      Color(0xFFF1C40F),
-      Color(0xFFE74C3C),
-      Color(0xFF9B59B6),
-      Color(0xFF34495E),
-    ];
-    int colorIndex = 0;
-    final List<BarChartGroupData> barGroups = sortedExpenses.map((entry) {
-      final category = entry.key;
-      final amount = entry.value;
-      final color = barColors[colorIndex++ % barColors.length];
-      return BarChartGroupData(
-        x: category.index,
-        barRods: [
-          BarChartRodData(
-            toY: amount,
-            color: color,
-            width: 16,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ],
-        showingTooltipIndicators: const [],
-      );
-    }).toList();
-
-    final double maxY = sortedExpenses.isNotEmpty ? sortedExpenses.first.value * 1.2 : 5000.0;
-    final double interval = (maxY / 4).clamp(1000.0, 5000.0);
-
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.only(top: 20, left: 10, right: 20, bottom: 10),
-        child: Column(
-          children: [
-            SizedBox(
-              height: 200,
-              child: BarChart(
-                BarChartData(
-                  maxY: maxY,
-                  barGroups: barGroups,
-                  borderData: FlBorderData(show: false),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (value, meta) {
-                          final category = ExpenseCategory.values.firstWhere(
-                                (c) => c.index == value.toInt(),
-                            orElse: () => ExpenseCategory.other,
-                          );
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
-                            child: Text(
-                              category.displayName,
-                              style: const TextStyle(
-                                color: Colors.black54,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          );
-                        },
-                        reservedSize: 30,
-                      ),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (value, meta) => Text(
-                          '₹${(value / 1000).toStringAsFixed(0)}k',
-                          style: const TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                        interval: interval,
-                        reservedSize: 40,
-                      ),
-                    ),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  ),
-                  gridData: FlGridData(
-                    show: true,
-                    drawHorizontalLine: true,
-                    drawVerticalLine: false,
-                    horizontalInterval: interval,
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.grey.shade300,
-                      strokeWidth: 1,
-                    ),
-                  ),
-                  alignment: BarChartAlignment.spaceAround,
-                  barTouchData: BarTouchData(
-                    enabled: false,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Monthly Spending by Category',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  if (lower.contains('wifi') || lower.contains('internet')) {
+    return Icons.wifi_rounded;
   }
-
-  Widget _buildBalanceCard(double balance) {
-    Color balanceColor = balance >= 0 ? Colors.white : Colors.red.shade100;
-    Color cardColor = balance >= 0 ? Colors.teal.shade800! : Colors.red.shade800!;
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: cardColor.withOpacity(0.4),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          )
-        ],
-        gradient: LinearGradient(
-          colors: [cardColor, balance >= 0 ? Colors.teal.shade600! : Colors.red.shade600!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Card(
-        color: Colors.transparent,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(28.0),
-          child: Column(
-            children: [
-              Text(
-                'Total Balance',
-                style: TextStyle(fontSize: 18, color: balanceColor, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                NumberFormat.currency(symbol: '₹').format(balance.abs()),
-                style: TextStyle(fontSize: 44, fontWeight: FontWeight.w900, color: balanceColor),
-              ),
-              if (balance < 0)
-                Text(
-                  '(Outstanding)',
-                  style: TextStyle(fontSize: 14, color: balanceColor.withOpacity(0.8), fontWeight: FontWeight.w500),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
+  if (lower.contains('emi') || lower.contains('loan')) {
+    return Icons.account_balance_rounded;
   }
-
-  Widget _buildNetWorthTracker() {
-    final netWorth = manager.netWorth;
-    final assets = manager.totalAssets;
-    final liabilities = manager.totalLiabilities;
-    Color netWorthColor = netWorth >= 0 ? Colors.green.shade700! : Colors.red.shade700!;
-
-    if (assets == 0.0 && liabilities == 0.0) {
-      return Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Center(
-            child: Text(
-              'Add assets and liabilities to calculate Net Worth.',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Current Net Worth:', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
-                Text(
-                  NumberFormat.currency(symbol: '₹').format(netWorth),
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: netWorthColor),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildNetWorthDetail('Total Assets', assets, Colors.green),
-            _buildNetWorthDetail('Total Liabilities', liabilities, Colors.red),
-            const Divider(height: 16),
-            const Text('Net Worth Trend (Dynamic)', style: TextStyle(fontWeight: FontWeight.w500, color: Colors.black87)),
-            SizedBox(
-              height: 150,
-              child: _buildLineChart(manager.historicalNetWorth),
-            ),
-          ],
-        ),
-      ),
-    );
+  if (lower.contains('phone') || lower.contains('mobile')) {
+    return Icons.phone_iphone_rounded;
   }
-
-  Widget _buildNetWorthDetail(String title, double amount, MaterialColor color) {
-    final detailColor = color.shade700;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(title, style: TextStyle(color: detailColor, fontWeight: FontWeight.w500)),
-          Text(
-            '₹${NumberFormat.currency(symbol: '₹').format(amount)}',
-            style: TextStyle(fontWeight: FontWeight.w700, color: detailColor, fontSize: 16),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSpendingTrends(double monthlyExpense) {
-    const previousMonthlyExpense = 0.0;
-    final difference = monthlyExpense - previousMonthlyExpense;
-    final prediction = monthlyExpense > 0 ? 'Tracking your spending now!' : 'Add your first transaction!';
-    bool isPositivePrediction = difference < 0;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Expense vs. Previous Month:', style: TextStyle(fontWeight: FontWeight.w500, color: Colors.black87)),
-                Row(
-                  children: [
-                    Text(
-                      NumberFormat.currency(symbol: '₹').format(monthlyExpense),
-                      style: TextStyle(
-                        color: monthlyExpense == 0.0 ? Colors.grey.shade600 : Colors.red.shade600,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    Icon(
-                      monthlyExpense == 0.0 ? Icons.remove : Icons.arrow_upward_rounded,
-                      color: monthlyExpense == 0.0 ? Colors.grey.shade600 : Colors.red.shade600,
-                      size: 20,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            const Text('Predictive Insight:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isPositivePrediction ? Colors.teal.shade50 : Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                prediction,
-                style: TextStyle(fontSize: 14, color: isPositivePrediction ? Colors.teal.shade700 : Colors.red.shade700, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBudgetSummary() {
-    // Setting dynamic budget data placeholders
-    double transportSpent = 0.0;
-    double transportBudget = 15000.0;
-    double foodSpent = 0.0;
-    double foodBudget = 3000.0;
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildBudgetBar('Transport', transportSpent, transportBudget),
-            const SizedBox(height: 16),
-            _buildBudgetBar('Food', foodSpent, foodBudget),
-            const SizedBox(height: 16),
-            Text(
-              'Alert: Budget tracking starts when you log transactions.',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBudgetBar(String category, double spent, double limit) {
-    double progress = spent / limit;
-    Color barColor = progress > 0.8 ? Colors.deepOrange.shade600! : Colors.teal.shade500!;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(category, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-            Text('${NumberFormat.currency(symbol: '₹').format(spent)} / ${NumberFormat.currency(symbol: '₹').format(limit)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: LinearProgressIndicator(
-            value: progress.clamp(0.0, 1.0),
-            backgroundColor: Colors.grey.shade300,
-            valueColor: AlwaysStoppedAnimation<Color>(barColor),
-            minHeight: 12,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTransactionList(List<Transaction> transactions) {
-    if (transactions.isEmpty) {
-      return const Center(child: Text('No transactions recorded yet.'));
-    }
-    transactions.sort((a, b) => b.date.compareTo(a.date));
-    return ListView.builder(
-      physics: const NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
-      itemCount: transactions.length,
-      itemBuilder: (context, index) {
-        final transaction = transactions[index];
-        final isIncome = transaction.type == TransactionType.income;
-        return Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: CircleAvatar(
-              backgroundColor: isIncome ? Colors.green.shade100 : Colors.red.shade100,
-              child: Text(
-                transaction.category.emoji,
-                style: const TextStyle(fontSize: 24),
-              ),
-            ),
-            title: Text(
-              transaction.description,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            subtitle: Text(
-              '${transaction.category.displayName} - ${DateFormat('MMM d, yyyy').format(transaction.date)}',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            trailing: Text(
-              '${isIncome ? '+' : '-'} ${NumberFormat.currency(symbol: '₹').format(transaction.amount)}',
-              style: TextStyle(
-                color: isIncome ? Colors.green.shade700 : Colors.red.shade700,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildFinancialAdvice(double balance) {
-    if (balance >= 0) return const SizedBox.shrink();
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: Colors.red.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.warning_rounded, color: Colors.red.shade800),
-                const SizedBox(width: 8),
-                Text('Financial Warning!', style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  color: Colors.red.shade800,
-                )),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Your balance is negative. Here are a few tips to help you get back on track:',
-              style: TextStyle(fontSize: 14, color: Colors.black87),
-            ),
-            const SizedBox(height: 8),
-            const Text('• Create a detailed budget.', style: TextStyle(fontSize: 13)),
-            const Text('• Identify and reduce non-essential spending.', style: TextStyle(fontSize: 13)),
-            const Text('• Prioritize high-interest debt repayment.', style: TextStyle(fontSize: 13)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWeeklyChallengeCard(BuildContext context) {
-    final challenge = manager.challenges.first;
-    final progressPercentage = (challenge.progress / challenge.target).clamp(0.0, 1.0);
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Weekly Challenge',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal.shade800,
-                  ),
-                ),
-                Icon(Icons.emoji_events, color: Colors.teal.shade700),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              challenge.title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              challenge.description,
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: progressPercentage,
-                backgroundColor: Colors.grey.shade300,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.green.shade600!),
-                minHeight: 12,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${(progressPercentage * 100).toStringAsFixed(0)}% Complete',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<TransactionManager>(
-      builder: (context, manager, child) {
-        return SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                // FIX: Use StreamBuilder for totalBalanceStream
-                StreamBuilder<double>(
-                  stream: manager.totalBalanceStream,
-                  initialData: 0.0, // Added initial data for smooth start
-                  builder: (context, balanceSnapshot) {
-                    final balance = balanceSnapshot.data ?? 0.0;
-                    return Column(
-                      children: [
-                        _buildBalanceCard(balance),
-                        if (balance < 0) ...[
-                          const SizedBox(height: 16),
-                          _buildFinancialAdvice(balance),
-                        ],
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildWeeklyChallengeCard(context),
-                _buildSectionTitle('Monthly Spending Breakdown'),
-
-                // FIX: Use StreamBuilder for expensesByCategoryStream
-                StreamBuilder<Map<ExpenseCategory, double>>(
-                  stream: manager.expensesByCategoryStream,
-                  initialData: const {}, // Added initial data for smooth start
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting && snapshot.data!.isEmpty) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    final expenses = snapshot.data ?? {};
-                    if (expenses.isEmpty) {
-                      return _buildEmptyChartPlaceholder('Spending Breakdown');
-                    }
-                    return _buildExpenseBarChart(context, expenses);
-                  },
-                ),
-
-                _buildSectionTitle('Spending Trends & Insights'),
-                // FIX: Use StreamBuilder for monthlyExpenseStream
-                StreamBuilder<double>(
-                  stream: manager.monthlyExpenseStream,
-                  initialData: 0.0, // Added initial data for smooth start
-                  builder: (context, monthlyExpenseSnapshot) {
-                    final monthlyExpense = monthlyExpenseSnapshot.data ?? 0.0;
-                    return _buildSpendingTrends(monthlyExpense);
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildSectionTitle('Monthly Spending Trend'),
-
-                FutureBuilder<List<double>>(
-                  future: manager.historicalMonthlyExpense,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const SizedBox(height: 250, child: Center(child: CircularProgressIndicator()));
-                    }
-                    final data = snapshot.data ?? [];
-                    return SizedBox(height: 250, child: _buildLineChart(data));
-                  },
-                ),
-
-                _buildSectionTitle('Monthly Budget Overview'),
-                _buildBudgetSummary(),
-                _buildSectionTitle('Net Worth Tracker'),
-                _buildNetWorthTracker(),
-                _buildSectionTitle('Recent Transactions'),
-                // Transaction List (Already correctly using StreamBuilder)
-                StreamBuilder<List<Transaction>>(
-                  stream: manager.transactionsStream,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      // IMPROVED ERROR MESSAGE for better debugging
-                      return const Center(child: Text('Error loading transactions. Check Firebase rules or internet connection.', style: TextStyle(color: Colors.red)));
-                    }
-                    final transactions = snapshot.data ?? [];
-                    return _buildTransactionList(transactions.take(5).toList());
-                  },
-                ),
-                const SizedBox(height: 48),
-                SizedBox(
-                  height: 50,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (context) => const LoginPage()),
-                      );
-                    },
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign Out'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red.shade700,
-                      side: BorderSide(color: Colors.red.shade100),
-                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
+  return Icons.receipt_long_rounded;
 }
-// END OF DASHBOARD
 
-// ------------------------------
-// Goals Page
-// ------------------------------
-class GoalsPage extends StatelessWidget {
-  const GoalsPage({super.key});
+void _showAddBillDialog(BuildContext context, TransactionManager manager) {
+  final titleController = TextEditingController();
+  final amountController = TextEditingController();
+  DateTime? selectedDate;
+  String repeatCycle = 'Monthly';
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Consumer<TransactionManager>(
-        builder: (context, manager, child) {
-          if (manager.goals.isEmpty) {
-            return Center(
+  showDialog(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setState) {
+          return AlertDialog(
+            title: const Text('Add bill'),
+            content: SingleChildScrollView(
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.star_half_rounded, size: 80, color: Colors.grey.shade400),
-                  const SizedBox(height: 16),
-                  const Text('No financial goals set yet!', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                  const Text('Tap "+" to set your first goal.', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                  const Text('Swipe left to delete a goal.', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                ],
-              ),
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16.0),
-            itemCount: manager.goals.length,
-            itemBuilder: (context, index) {
-              final goal = manager.goals[index];
-              final progress = goal.currentAmount / goal.targetAmount;
-              final daysLeft = goal.deadline.difference(DateTime.now()).inDays.clamp(0, double.infinity).toInt();
-
-              return Dismissible(
-                key: ValueKey(goal.id),
-                direction: DismissDirection.endToStart,
-                onDismissed: (direction) {
-                  manager.removeGoal(goal.id);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${goal.name} dismissed')),
-                  );
-                },
-                background: Container(
-                  color: Colors.red.shade700,
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20.0),
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                child: Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              goal.name,
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              progress >= 1.0 ? 'Achieved!' : (daysLeft > 0 ? '$daysLeft days left' : 'Overdue'),
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  color: progress >= 1.0 ? Colors.blue.shade700 : (daysLeft < 30 ? Colors.red.shade600 : Colors.teal.shade600),
-                                  fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(
-                            value: progress.clamp(0.0, 1.0),
-                            backgroundColor: Colors.grey.shade300,
-                            valueColor: AlwaysStoppedAnimation<Color>(progress >= 1.0 ? Colors.blue.shade700! : Colors.green.shade700!),
-                            minHeight: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Saved: ${NumberFormat.currency(symbol: '₹').format(goal.currentAmount)}',
-                              style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500),
-                            ),
-                            Text(
-                              'Target: ${NumberFormat.currency(symbol: '₹').format(goal.targetAmount)}',
-                              style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Progress: ${(progress * 100).toStringAsFixed(1)}%',
-                          style: TextStyle(color: progress >= 1.0 ? Colors.blue.shade700 : Colors.teal.shade600, fontWeight: FontWeight.bold),
-                        ),
-                      ],
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Bill title',
                     ),
                   ),
-                ),
-              );
-            },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => const AddGoalPage()),
-          );
-        },
-        backgroundColor: Colors.teal.shade700,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-    );
-  }
-}
-
-// New: Add Goal Page
-class AddGoalPage extends StatefulWidget {
-  const AddGoalPage({super.key});
-
-  @override
-  State<AddGoalPage> createState() => _AddGoalPageState();
-}
-
-class _AddGoalPageState extends State<AddGoalPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _targetAmountController = TextEditingController();
-  final _currentAmountController = TextEditingController();
-  DateTime _deadline = DateTime.now().add(const Duration(days: 365));
-
-  Future<void> _selectDeadline(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _deadline,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-    );
-    if (!mounted) return;
-    if (picked != null && picked != _deadline) {
-      setState(() {
-        _deadline = picked;
-      });
-    }
-  }
-
-  void _saveGoal() {
-    if (_formKey.currentState == null || !_formKey.currentState!.validate()) {
-      return;
-    }
-
-    final newGoal = Goal(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: _nameController.text,
-      targetAmount: double.parse(_targetAmountController.text),
-      currentAmount: double.parse(_currentAmountController.text),
-      deadline: _deadline,
-    );
-
-    Provider.of<TransactionManager>(context, listen: false).addGoal(newGoal);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Goal "${newGoal.name}" added successfully!')),
-    );
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Set New Goal'),
-        backgroundColor: Colors.teal.shade800,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: 'Goal Name (e.g., Vacation Fund)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.star),
-                ),
-                validator: (value) => value == null || value.isEmpty ? 'Please enter a goal name.' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _targetAmountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Target Amount (₹)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.money),
-                ),
-                validator: (value) => double.tryParse(value ?? '') == null || double.parse(value!) <= 0 ? 'Enter a valid target amount.' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _currentAmountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Current Saved Amount (₹)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.savings),
-                ),
-                validator: (value) => double.tryParse(value ?? '') == null || double.parse(value!) < 0 ? 'Enter a valid amount.' : null,
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.calendar_today),
-                title: const Text('Deadline'),
-                subtitle: Text(DateFormat('EEEE, MMM d, yyyy').format(_deadline)),
-                onTap: () => _selectDeadline(context),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: Colors.grey.shade400!),
-                ),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _saveGoal,
-                  icon: const Icon(Icons.check, color: Colors.white),
-                  label: const Text(
-                    'Create Goal',
-                    style: TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal.shade700,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ------------------------------
-// Bill Page
-// ------------------------------
-class BillPage extends StatelessWidget {
-  const BillPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Consumer<TransactionManager>(
-        builder: (context, manager, child) {
-          final pendingBills = manager.bills.where((b) => !b.isPaid).toList();
-          final paidBills = manager.bills.where((b) => b.isPaid).toList();
-
-          if (manager.bills.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.receipt_long, size: 80, color: Colors.grey.shade400),
-                  const SizedBox(height: 16),
-                  const Text('No bills to track yet!', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                  const Text('Tap the "+" button to add your first bill.', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                ],
-              ),
-            );
-          }
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (pendingBills.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text('Pending Bills ⚠️', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red)),
-                  ),
-                  _buildBillList(context, pendingBills, manager, isPending: true),
-                  if (paidBills.isNotEmpty) const Divider(height: 32, thickness: 2),
-                ],
-                if (paidBills.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text('Paid Bills ✅', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
-                  ),
-                  _buildBillList(context, paidBills, manager, isPending: false),
-                ],
-              ],
-            ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => const AddBillPage()),
-          );
-        },
-        backgroundColor: Colors.teal.shade700,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-    );
-  }
-
-  Widget _buildBillList(BuildContext context, List<Bill> bills, TransactionManager manager, {required bool isPending}) {
-    return ListView.builder(
-      physics: const NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
-      itemCount: bills.length,
-      itemBuilder: (context, index) {
-        final bill = bills[index];
-        final isDueSoon = isPending && bill.dueDate.difference(DateTime.now()).inDays <= 7 && bill.dueDate.isAfter(DateTime.now().subtract(const Duration(days: 1)));
-
-        return Dismissible(
-          key: ValueKey(bill.id),
-          direction: DismissDirection.endToStart,
-          onDismissed: (direction) {
-            manager.removeBill(bill.id);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('${bill.name} bill removed.')),
-            );
-          },
-          background: Container(
-            color: Colors.red.shade700,
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20.0),
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            child: const Icon(Icons.delete, color: Colors.white),
-          ),
-          child: Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            color: bill.isPaid
-                ? Colors.green.shade50
-                : isDueSoon ? Colors.orange.shade50 : Colors.red.shade50,
-            margin: const EdgeInsets.only(bottom: 16),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              leading: CircleAvatar(
-                backgroundColor: bill.isPaid ? Colors.green.shade200 : Colors.red.shade200,
-                child: Icon(
-                  bill.isPaid ? Icons.check_circle_rounded : Icons.pending_rounded,
-                  color: bill.isPaid ? Colors.green.shade800 : Colors.red.shade800,
-                ),
-              ),
-              title: Text(bill.name, style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                color: Colors.black87,
-                decoration: bill.isPaid ? TextDecoration.lineThrough : null,
-              )),
-              subtitle: Text(
-                bill.isPaid ? 'Paid on time' : 'Due: ${DateFormat('MMM d, yyyy').format(bill.dueDate)}',
-                style: TextStyle(
-                  color: bill.isPaid ? Colors.green.shade600 : Colors.red.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '₹${bill.amount.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      color: bill.isPaid ? Colors.green.shade700 : Colors.red.shade700,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Amount (₹)',
                     ),
                   ),
-                  if (isDueSoon && !bill.isPaid)
-                    const Text('Due Soon!', style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              onTap: () {
-                manager.togglePaidStatus(bill.id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${bill.name} status toggled to ${bill.isPaid ? 'Pending' : 'Paid'}')),
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// New: Add Bill Page
-class AddBillPage extends StatefulWidget {
-  const AddBillPage({super.key});
-
-  @override
-  State<AddBillPage> createState() => _AddBillPageState();
-}
-
-class _AddBillPageState extends State<AddBillPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _amountController = TextEditingController();
-  DateTime _dueDate = DateTime.now().add(const Duration(days: 30));
-
-  Future<void> _selectDueDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _dueDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
-    );
-    if (!mounted) return;
-    if (picked != null && picked != _dueDate) {
-      setState(() {
-        _dueDate = picked;
-      });
-    }
-  }
-
-  void _saveBill() {
-    if (_formKey.currentState == null || !_formKey.currentState!.validate()) {
-      return;
-    }
-
-    final newBill = Bill(
-      id: math.Random().nextInt(100000).toString(), // Simple unique ID generation
-      name: _nameController.text,
-      amount: double.parse(_amountController.text),
-      dueDate: _dueDate,
-      isPaid: false,
-    );
-
-    Provider.of<TransactionManager>(context, listen: false).addBill(newBill);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Bill "${newBill.name}" added successfully!')),
-    );
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add New Bill'),
-        backgroundColor: Colors.teal.shade800,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: 'Bill Name (e.g., Electricity, Rent)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.receipt),
-                ),
-                validator: (value) => value == null || value.isEmpty ? 'Please enter a bill name.' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _amountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Amount (₹)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.money),
-                ),
-                validator: (value) => double.tryParse(value ?? '') == null || double.parse(value!) <= 0 ? 'Enter a valid bill amount.' : null,
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.calendar_today),
-                title: const Text('Due Date'),
-                subtitle: Text(DateFormat('EEEE, MMM d, yyyy').format(_dueDate)),
-                onTap: () => _selectDueDate(context),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: Colors.grey.shade400!),
-                ),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _saveBill,
-                  icon: const Icon(Icons.check, color: Colors.white),
-                  label: const Text(
-                    'Save Bill',
-                    style: TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal.shade700,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ------------------------------
-// Shared Wallets Page
-// ------------------------------
-class SharedWalletsPage extends StatelessWidget {
-  const SharedWalletsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Consumer<TransactionManager>(
-        builder: (context, manager, child) {
-          final wallets = manager.sharedWallets;
-          if (wallets.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.wallet, size: 80, color: Colors.grey.shade400),
-                  const SizedBox(height: 16),
-                  const Text('No shared wallets created yet!', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                  const Text('Tap the "+" button to start sharing expenses.', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                ],
-              ),
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(16.0),
-            itemCount: wallets.length,
-            itemBuilder: (context, index) {
-              final wallet = wallets[index];
-              final isPositive = wallet.balance >= 0;
-              return Dismissible(
-                key: ValueKey(wallet.id),
-                direction: DismissDirection.endToStart,
-                onDismissed: (direction) {
-                  manager.removeSharedWallet(wallet.id);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${wallet.name} wallet removed.')),
-                  );
-                },
-                background: Container(
-                  color: Colors.red.shade700,
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20.0),
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                child: Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  color: isPositive ? Colors.green.shade50 : Colors.red.shade50,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.group,
-                      color: isPositive ? Colors.green.shade800 : Colors.red.shade800,
-                    ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.calendar_month_rounded),
                     title: Text(
-                      wallet.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      selectedDate == null
+                          ? 'Pick due date'
+                          : DateFormat('dd MMM yyyy').format(selectedDate!),
                     ),
-                    subtitle: Text('Members: ${wallet.members.join(', ')}'),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '₹${wallet.balance.abs().toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: isPositive ? Colors.green.shade700 : Colors.red.shade700,
-                          ),
-                        ),
-                        Text(
-                          isPositive ? 'You are owed' : 'You owe',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isPositive ? Colors.green.shade600 : Colors.red.shade600,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                    onTap: () async {
+                      final now = DateTime.now();
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: now.add(const Duration(days: 3)),
+                        firstDate: now,
+                        lastDate: now.add(const Duration(days: 365 * 3)),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          selectedDate = picked;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: repeatCycle,
+                    decoration: const InputDecoration(
+                      labelText: 'Repeat cycle',
                     ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'One-time',
+                        child: Text('One-time'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Monthly',
+                        child: Text('Monthly'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Yearly',
+                        child: Text('Yearly'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        repeatCycle = value;
+                      });
+                    },
                   ),
-                ),
-              );
-            },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => const AddSharedWalletPage()),
-          );
-        },
-        backgroundColor: Colors.teal.shade700,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-    );
-  }
-}
-
-// New: Add Shared Wallet Page
-class AddSharedWalletPage extends StatefulWidget {
-  const AddSharedWalletPage({super.key});
-
-  @override
-  State<AddSharedWalletPage> createState() => _AddSharedWalletPageState();
-}
-
-class _AddSharedWalletPageState extends State<AddSharedWalletPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _balanceController = TextEditingController();
-  final _memberController = TextEditingController();
-  List<String> _members = ['You'];
-
-  void _addMember() {
-    if (_memberController.text.isNotEmpty && !_members.contains(_memberController.text)) {
-      setState(() {
-        _members.add(_memberController.text);
-        _memberController.clear();
-      });
-    }
-  }
-
-  void _removeMember(String member) {
-    if (member != 'You') {
-      setState(() {
-        _members.remove(member);
-      });
-    }
-  }
-
-  void _saveWallet() {
-    if (_formKey.currentState == null || !_formKey.currentState!.validate()) {
-      return;
-    }
-
-    final newWallet = SharedWallet(
-      id: math.Random().nextInt(100000).toString(),
-      name: _nameController.text,
-      members: _members,
-      balance: double.tryParse(_balanceController.text) ?? 0.0,
-    );
-
-    Provider.of<TransactionManager>(context, listen: false).addSharedWallet(newWallet);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Shared Wallet "${newWallet.name}" created!')),
-    );
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Shared Wallet'),
-        backgroundColor: Colors.teal.shade800,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: 'Wallet Name (e.g., Rent, Trip)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.wallet_travel),
-                ),
-                validator: (value) => value == null || value.isEmpty ? 'Please enter a wallet name.' : null,
+                ],
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _balanceController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Initial Balance (₹) (e.g., 0, or +/- amount)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.balance),
-                ),
-                validator: (value) => double.tryParse(value ?? '') == null ? 'Enter a valid number.' : null,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
               ),
-              const SizedBox(height: 24),
-              const Text('Members', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8.0,
-                children: _members.map((member) => Chip(
-                  label: Text(member),
-                  onDeleted: member != 'You' ? () => _removeMember(member) : null,
-                )).toList(),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _memberController,
-                decoration: InputDecoration(
-                  labelText: 'Add New Member Name',
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.add_reaction),
-                    onPressed: _addMember,
-                  ),
-                  border: const OutlineInputBorder(),
-                ),
-                onSubmitted: (_) => _addMember(),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _saveWallet,
-                  icon: const Icon(Icons.check, color: Colors.white),
-                  label: const Text(
-                    'Create Wallet',
-                    style: TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal.shade700,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ------------------------------
-// Achievements Page
-// ------------------------------
-class AchievementsPage extends StatelessWidget {
-  const AchievementsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<TransactionManager>(
-      builder: (context, manager, child) {
-        final achievements = manager.achievements;
-        final unlockedCount = achievements.where((a) => a.isUnlocked).length;
-        final totalCount = achievements.length;
-
-        return Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                color: Colors.teal.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Center(
-                    child: Text(
-                      '🏆 You have unlocked $unlockedCount of $totalCount achievements! 🚀',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal.shade800),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 16.0,
-                    mainAxisSpacing: 16.0,
-                    childAspectRatio: 0.8,
-                  ),
-                  itemCount: achievements.length,
-                  itemBuilder: (context, index) {
-                    final achievement = achievements[index];
-                    return GridTile(
-                      child: GestureDetector(
-                        onTap: () {
-                          // Allow manual toggle for demonstration
-                          manager.toggleAchievement(achievement.id);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('${achievement.title} status toggled')),
-                          );
-                        },
-                        child: Opacity(
-                          opacity: achievement.isUnlocked ? 1.0 : 0.4,
-                          child: Card(
-                            elevation: 4,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            color: achievement.isUnlocked ? Colors.white : Colors.grey.shade100,
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    achievement.icon,
-                                    size: 60,
-                                    color: achievement.isUnlocked ? Colors.teal.shade700 : Colors.grey.shade400,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    achievement.title,
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: achievement.isUnlocked ? Colors.black87 : Colors.grey.shade600,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    achievement.description,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: achievement.isUnlocked ? Colors.black54 : Colors.grey.shade500,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    achievement.isUnlocked ? 'UNLOCKED' : 'Tap to Unlock (Demo)',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: achievement.isUnlocked ? Colors.green.shade700 : Colors.red.shade700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+              TextButton(
+                onPressed: () async {
+                  final title = titleController.text.trim();
+                  final rawAmount =
+                      amountController.text.trim().replaceAll(',', '');
+                  final amount = double.tryParse(rawAmount) ?? 0.0;
+                  if (title.isEmpty || amount <= 0 || selectedDate == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Please enter a valid title, amount, and due date for the bill.',
                         ),
                       ),
                     );
-                  },
-                ),
+                    return;
+                  }
+                  final bill = Bill(
+                    id: '',
+                    name: title,
+                    amount: amount,
+                    dueDate: selectedDate!,
+                    isPaid: false,
+                    repeatCycle: repeatCycle,
+                  );
+                  await manager.addBillToFirestore(bill);
+                  // ignore: use_build_context_synchronously
+                  Navigator.of(ctx).pop();
+                },
+                child: const Text('Add'),
               ),
             ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ------------------------------
-// Add Transaction Options Page
-// ------------------------------
-class AddTransactionOptionsPage extends StatelessWidget {
-  const AddTransactionOptionsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Transaction'),
-        backgroundColor: Colors.teal.shade800,
-        foregroundColor: Colors.white,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AddTransactionPage()));
-              },
-              icon: const Icon(Icons.edit_note),
-              label: const Text('Manual Entry'),
-              style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.teal,
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ReceiptScanPage()));
-              },
-              icon: const Icon(Icons.receipt_long),
-              label: const Text('Scan Receipt'),
-              style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.teal,
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SplitBillPage()));
-              },
-              icon: const Icon(Icons.group),
-              label: const Text('Split Expense'),
-              style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.teal,
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// New page for Receipt Scanning (Placeholder)
-class ReceiptScanPage extends StatelessWidget {
-  const ReceiptScanPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scan Receipt'),
-        backgroundColor: Colors.teal.shade800,
-        foregroundColor: Colors.white,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.camera_alt_rounded, size: 100, color: Colors.teal),
-            const SizedBox(height: 20),
-            const Text(
-              'Align the receipt within the frame to scan.',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-            const SizedBox(height: 40),
-            ElevatedButton.icon(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Simulating receipt scan...')),
-                );
-                Navigator.of(context).pop();
-              },
-              icon: const Icon(Icons.document_scanner),
-              label: const Text('Start Scan'),
-              style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.teal,
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// New page for Split Bill
-class SplitBillPage extends StatefulWidget {
-  const SplitBillPage({super.key});
-
-  @override
-  State<SplitBillPage> createState() => _SplitBillPageState();
-}
-
-class _SplitBillPageState extends State<SplitBillPage> {
-  final _billAmountController = TextEditingController();
-  final List<String> _members = ['You'];
-  final _newMemberController = TextEditingController();
-
-  void _addMember() {
-    if (_newMemberController.text.isNotEmpty) {
-      setState(() {
-        _members.add(_newMemberController.text);
-        _newMemberController.clear();
-      });
-    }
-  }
-
-  void _splitBill() {
-    if (_billAmountController.text.isEmpty || _members.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a bill amount and at least one member.')),
+          );
+        },
       );
-      return;
-    }
-    final totalAmount = double.tryParse(_billAmountController.text) ?? 0.0;
-    final amountsOwed = manager.splitBill(totalAmount, _members);
+    },
+  );
+}
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Bill Split Results'),
+IconData _walletIconForName(String name) {
+  final lower = name.toLowerCase();
+  if (lower.contains('cash')) {
+    return Icons.money_rounded;
+  }
+  if (lower.contains('bank') || lower.contains('account')) {
+    return Icons.account_balance_wallet_rounded;
+  }
+  if (lower.contains('upi') ||
+      lower.contains('gpay') ||
+      lower.contains('pay')) {
+    return Icons.qr_code_scanner_rounded;
+  }
+  if (lower.contains('card') ||
+      lower.contains('credit') ||
+      lower.contains('debit')) {
+    return Icons.credit_card_rounded;
+  }
+  return Icons.wallet_rounded;
+}
+
+void _showAddWalletDialog(
+  BuildContext context,
+  TransactionManager manager,
+) {
+  final nameController = TextEditingController();
+  final membersController = TextEditingController();
+  final balanceController = TextEditingController();
+
+  showDialog(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        title: const Text('Add wallet'),
         content: SingleChildScrollView(
           child: Column(
-            children: amountsOwed.entries.map((entry) =>
-                ListTile(
-                  title: Text(entry.key),
-                  trailing: Text('₹${entry.value.toStringAsFixed(2)}'),
-                )
-            ).toList(),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Wallet name',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: balanceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Initial balance (₹)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: membersController,
+                decoration: const InputDecoration(
+                  labelText: 'Members (comma separated)',
+                ),
+              ),
+            ],
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              final balance =
+                  double.tryParse(balanceController.text.trim()) ?? 0.0;
+              final members = membersController.text
+                  .split(',')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+              if (name.isEmpty) {
+                Navigator.of(ctx).pop();
+                return;
+              }
+              final wallet = SharedWallet(
+                id: '',
+                name: name,
+                members: members,
+                balance: balance,
+              );
+              await manager.addSharedWalletToFirestore(wallet);
+              // ignore: use_build_context_synchronously
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+void _showTransferDialog(
+  BuildContext context,
+  TransactionManager manager,
+  List<SharedWallet> wallets,
+  SharedWallet fromWallet,
+) {
+  SharedWallet? toWallet;
+  final amountController = TextEditingController();
+
+  showDialog(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setState) {
+          return AlertDialog(
+            title: const Text('Transfer between wallets'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<SharedWallet>(
+                    value: toWallet,
+                    decoration: const InputDecoration(
+                      labelText: 'To wallet',
+                    ),
+                    items: wallets
+                        .where((w) => w.id != fromWallet.id)
+                        .map(
+                          (w) => DropdownMenuItem(
+                            value: w,
+                            child: Text(w.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        toWallet = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Amount (₹)',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  final amount =
+                      double.tryParse(amountController.text.trim()) ?? 0.0;
+                  if (amount <= 0 || toWallet == null) {
+                    Navigator.of(ctx).pop();
+                    return;
+                  }
+                  final fromUpdated = SharedWallet(
+                    id: fromWallet.id,
+                    name: fromWallet.name,
+                    members: fromWallet.members,
+                    balance: fromWallet.balance - amount,
+                  );
+                  final toUpdated = SharedWallet(
+                    id: toWallet!.id,
+                    name: toWallet!.name,
+                    members: toWallet!.members,
+                    balance: toWallet!.balance + amount,
+                  );
+
+                  await manager.updateSharedWalletInFirestore(fromUpdated);
+                  await manager.updateSharedWalletInFirestore(toUpdated);
+                  // ignore: use_build_context_synchronously
+                  Navigator.of(ctx).pop();
+                },
+                child: const Text('Transfer'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+// --- Profile Screen ---
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _nameController = TextEditingController();
+  bool _saving = false;
+  bool _sharing = false;
+  String? _photoUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    _nameController.text = user?.displayName ?? '';
+    _photoUrl = user?.photoURL;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, imageQuality: 80);
+    if (picked == null) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() {
+      _saving = true;
+    });
+
+    try {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('profile_photos')
+          .child('${user.uid}.jpg');
+      await ref.putFile(File(picked.path));
+      final url = await ref.getDownloadURL();
+      await user.updatePhotoURL(url);
+      setState(() {
+        _photoUrl = url;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update profile photo')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() {
+      _saving = true;
+    });
+
+    try {
+      await user.updateDisplayName(_nameController.text.trim());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update profile')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _shareApp() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() {
+      _sharing = true;
+    });
+
+    try {
+      final manager = Provider.of<TransactionManager>(context, listen: false);
+      final code = await manager.generateReferralCode(user.uid);
+
+      final message =
+          'Check out Money-Mate! It helps you track your money, goals and bills easily.\n'
+          'Use my referral code: $code when you sign up.\n'
+          'Download: https://play.google.com/store/apps/details?id=com.example.money_mate';
+
+      await Share.share(message, subject: 'Try Money-Mate');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _sharing = false;
+        });
+      }
+    }
+  }
+
+  void _openImagePicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera_rounded),
+                title: const Text('Take a photo'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_rounded),
+                title: const Text('Choose from gallery'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final theme = Theme.of(context);
+
+    final initials = (user?.displayName ?? user?.email ?? 'MM')
+        .trim()
+        .split(' ')
+        .where((p) => p.isNotEmpty)
+        .take(2)
+        .map((p) => p[0].toUpperCase())
+        .join();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profile'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_rounded),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (ctx) => const SettingsScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          Center(
+            child: Stack(
+              children: [
+                CircleAvatar(
+                  radius: 42,
+                  backgroundImage:
+                      _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                  child: _photoUrl == null
+                      ? Text(
+                          initials,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 22,
+                          ),
+                        )
+                      : null,
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: _openImagePicker,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.camera_alt_rounded,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _ProfileTextField(
+            controller: _nameController,
+            label: 'Full name',
+            icon: Icons.person_rounded,
+          ),
+          const SizedBox(height: 12),
+          _ProfileReadOnlyField(
+            label: 'Email',
+            value: user?.email ?? 'Not set',
+            icon: Icons.email_rounded,
+          ),
+          const SizedBox(height: 12),
+          _ProfileReadOnlyField(
+            label: 'User ID',
+            value: user?.uid ?? '-',
+            icon: Icons.key_rounded,
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton(
+              onPressed: _saving ? null : _saveProfile,
+              child: _saving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Save changes'),
+            ),
+          ),
+          const SizedBox(height: 28),
+          const Text(
+            'More',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.share_rounded,
+            title: 'Share / Refer Money-Mate',
+            subtitle: 'Invite friends and share your referral code',
+            trailing: _sharing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.chevron_right_rounded),
+            onTap: _shareApp,
+          ),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.logout_rounded,
+            title: 'Sign out',
+            subtitle: 'Log out and switch to a different account',
+            onTap: () async {
+              await FirebaseAuth.instance.signOut();
+              if (!mounted) return;
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
           ),
         ],
       ),
     );
   }
+}
+
+class _ProfileTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+
+  const _ProfileTextField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Split Expense'),
-        backgroundColor: Colors.teal.shade800,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _billAmountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Total Bill Amount',
-                prefixIcon: Icon(Icons.money),
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Members',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8.0,
-              children: _members.map((member) => Chip(
-                label: Text(member),
-                onDeleted: () {
-                  setState(() {
-                    _members.remove(member);
-                  });
-                },
-              )).toList(),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _newMemberController,
-              decoration: InputDecoration(
-                labelText: 'Add Member',
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: _addMember,
-                ),
-                border: const OutlineInputBorder(),
-              ),
-              onSubmitted: (_) => _addMember(),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: _splitBill,
-              icon: const Icon(Icons.calculate),
-              label: const Text('Split Bill'),
-              style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: Colors.teal.shade700,
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ],
-        ),
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
       ),
     );
   }
 }
 
+class _ProfileReadOnlyField extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
 
-// --- Add Transaction Page ---
-class AddTransactionPage extends StatefulWidget {
-  const AddTransactionPage({super.key});
+  const _ProfileReadOnlyField({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
 
   @override
-  State<AddTransactionPage> createState() => _AddTransactionPageState();
+  Widget build(BuildContext context) {
+    return TextField(
+      readOnly: true,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+      ),
+      controller: TextEditingController(text: value),
+    );
+  }
 }
 
-class _AddTransactionPageState extends State<AddTransactionPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _amountController = TextEditingController();
-  final _descriptionController = TextEditingController();
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final VoidCallback? onTap;
 
-  TransactionType _type = TransactionType.expense;
-  ExpenseCategory _category = ExpenseCategory.food;
-  DateTime _selectedDate = DateTime.now();
+  const _SettingsTile({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.onTap,
+  });
 
-  final List<ExpenseCategory> expenseCategories = const [
-    ExpenseCategory.food, ExpenseCategory.transport, ExpenseCategory.bills, ExpenseCategory.entertainment, ExpenseCategory.other
-  ];
-  final List<ExpenseCategory> incomeCategories = const [
-    ExpenseCategory.salary, ExpenseCategory.gift, ExpenseCategory.other
-  ];
-
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: subtitle != null ? Text(subtitle!) : null,
+      trailing: trailing ?? const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
     );
-    if (!mounted) return;
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-    }
+  }
+}
+
+// --- Settings Screen ---
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _notificationsEnabled = true;
+  bool _privacyLock = false;
+  bool _savingPassword = false;
+
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+
+  @override
+  void dispose() {
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    super.dispose();
   }
 
-  void _saveTransaction() async {
-    if (_formKey.currentState == null || !_formKey.currentState!.validate()) {
+  Future<void> _changePassword() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    if (_newPasswordController.text.trim().length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 6 characters')),
+      );
       return;
     }
-    final newTransaction = Transaction(
-      id: '',
-      amount: double.parse(_amountController.text),
-      category: _category,
-      type: _type,
-      date: _selectedDate,
-      description: _descriptionController.text,
-    );
-    // The transaction manager handles the Firebase update which triggers the stream
-    await Provider.of<TransactionManager>(context, listen: false).addTransaction(newTransaction);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${_type.name.toUpperCase()} added: ${NumberFormat.currency(symbol: '₹').format(newTransaction.amount)}')),
-    );
-    Navigator.of(context).pop();
+
+    setState(() {
+      _savingPassword = true;
+    });
+
+    try {
+      await user.updatePassword(_newPasswordController.text.trim());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Password updated successfully')),
+        );
+      }
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update password')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPassword = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeManager = Provider.of<ThemeManager>(context);
+    final isDark = themeManager.themeMode == ThemeMode.dark;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Add ${_type.name == 'income' ? 'Income' : 'Expense'}'),
-        backgroundColor: _type == TransactionType.income ? Colors.green.shade700 : Colors.red.shade700,
-        foregroundColor: Colors.white,
-        elevation: 0,
+        title: const Text('Settings'),
       ),
-      body: SingleChildScrollView(
+      body: ListView(
         padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ChoiceChip(
-                    label: const Text('Expense'),
-                    selected: _type == TransactionType.expense,
-                    onSelected: (selected) {
-                      setState(() {
-                        _type = TransactionType.expense;
-                        _category = expenseCategories.first;
-                      });
-                    },
-                    selectedColor: Colors.red.shade100,
-                  ),
-                  const SizedBox(width: 16),
-                  ChoiceChip(
-                    label: const Text('Income'),
-                    selected: _type == TransactionType.income,
-                    onSelected: (selected) {
-                      setState(() {
-                        _type = TransactionType.income;
-                        _category = incomeCategories.first;
-                      });
-                    },
-                    selectedColor: Colors.green.shade100,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              TextFormField(
-                controller: _amountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Amount (₹)',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.money),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty || double.tryParse(value) == null) {
-                    return 'Please enter a valid amount.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _descriptionController,
-                decoration: InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.description),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a description.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<ExpenseCategory>(
-                value: _category,
-                decoration: InputDecoration(
-                  labelText: 'Category',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  prefixIcon: const Icon(Icons.category),
-                ),
-                items: (_type == TransactionType.expense ? expenseCategories : incomeCategories)
-                    .map((cat) => DropdownMenuItem(
-                  value: cat,
-                  child: Text(cat.name.toUpperCase()),
-                ))
-                    .toList(),
-                onChanged: (ExpenseCategory? newValue) {
-                  setState(() {
-                    if (newValue != null) {
-                      _category = newValue;
-                    }
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.calendar_today),
-                title: const Text('Date'),
-                subtitle: Text(DateFormat('EEEE, MMM d, yyyy').format(_selectedDate)),
-                onTap: () => _selectDate(context),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: BorderSide(color: Colors.grey.shade400!),
-                ),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _saveTransaction,
-                  icon: const Icon(Icons.check, color: Colors.white),
-                  label: Text(
-                    'Save ${_type.name}',
-                    style: const TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _type == TransactionType.income ? Colors.green.shade700 : Colors.red.shade700,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ),
-            ],
+        children: [
+          const Text(
+            'Account',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            value: _notificationsEnabled,
+            title: const Text('Enable notifications'),
+            subtitle: const Text('Get reminders about bills and goals'),
+            onChanged: (value) {
+              setState(() {
+                _notificationsEnabled = value;
+              });
+            },
+          ),
+          SwitchListTile(
+            value: _privacyLock,
+            title: const Text('Privacy lock'),
+            subtitle: const Text('Require authentication when opening app'),
+            onChanged: (value) {
+              setState(() {
+                _privacyLock = value;
+              });
+            },
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Appearance',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            value: isDark,
+            title: const Text('Dark mode'),
+            onChanged: (value) {
+              themeManager.toggleTheme(value);
+            },
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Security',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _currentPasswordController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Current password',
+              prefixIcon: Icon(Icons.lock_outline_rounded),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _newPasswordController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'New password',
+              prefixIcon: Icon(Icons.lock_reset_rounded),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton(
+              onPressed: _savingPassword ? null : _changePassword,
+              child: _savingPassword
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Change password'),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// --- Login Page Widget (Improved UI) ---
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -2638,131 +1312,1901 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _rememberMe = false;
+  bool _obscurePassword = true;
+  bool _loading = false;
+  bool _googleLoading = false;
+
   final LocalAuthentication _localAuth = LocalAuthentication();
-  bool _isUserSignedIn = true;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   @override
-  void initState() {
-    super.initState();
-    if (_isUserSignedIn) {
-      _signInWithBiometrics();
-    }
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
-  void _navigateToHome() {
+  Future<void> _navigateWithBiometrics(BuildContext context) async {
+    bool allowBiometric = false;
+    try {
+      final canCheck = await _localAuth.canCheckBiometrics;
+      final isSupported = await _localAuth.isDeviceSupported();
+      if (canCheck && isSupported) {
+        allowBiometric = await _localAuth.authenticate(
+          localizedReason: 'Use biometrics to quickly unlock Money Mate',
+          options: const AuthenticationOptions(biometricOnly: true),
+        );
+      }
+    } catch (_) {
+      allowBiometric = false;
+    }
+
     if (!mounted) return;
+
+    // Even if biometrics fail or are unavailable, fall back to normal navigation
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const HomeScreen()),
+      MaterialPageRoute(builder: (ctx) => const HomeScreen()),
     );
   }
 
-  Future<void> _signInWithBiometrics() async {
-    final bool canAuthenticateWithBiometrics = await _localAuth.canCheckBiometrics;
-    if (!mounted) return;
+  Future<void> _handleLogin(BuildContext context) async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
 
-    if (canAuthenticateWithBiometrics) {
-      try {
-        final bool didAuthenticate = await _localAuth.authenticate(
-          localizedReason: 'Sign in to Money-Mate',
-          options: const AuthenticationOptions(
-            stickyAuth: true,
-            biometricOnly: true,
-          ),
-        );
-        if (!mounted) return;
-
-        if (didAuthenticate) {
-          debugPrint("Biometric authentication successful. Navigating to Home.");
-          _navigateToHome();
-        } else {
-          debugPrint("Biometric authentication failed or cancelled.");
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Biometric authentication failed or cancelled.')),
-          );
-        }
-      } catch (e) {
-        debugPrint("Error during biometric authentication: $e");
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('An error occurred: $e')),
-        );
-      }
-    } else {
-      debugPrint("Biometrics not available on this device.");
-      if (!mounted) return;
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Biometric login is not available.')),
+        const SnackBar(content: Text('Enter email and password to continue')),
       );
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      await _navigateWithBiometrics(context);
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Login failed')),
+      );
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Something went wrong. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _handleGoogleSignIn() {
-    debugPrint("Google Sign-In Attempted: Placeholder.");
-    _isUserSignedIn = true;
-    _navigateToHome();
-  }
+  Future<void> _handleGoogleSignIn(BuildContext context) async {
+    setState(() => _googleLoading = true);
+    try {
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        // user cancelled the flow
+        return;
+      }
 
-  void _handleFacebookSignIn() {
-    debugPrint("Facebook Sign-In Attempted: Placeholder.");
-    _isUserSignedIn = true;
-    _navigateToHome();
-  }
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
 
-  void _handlePhoneSignIn() {
-    debugPrint("Phone Sign-In Attempted (Placeholder). Navigating to Home.");
-    _isUserSignedIn = true;
-    _navigateToHome();
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      if (!mounted) return;
+      await _navigateWithBiometrics(context);
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Google sign-in failed')),
+      );
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Something went wrong with Google sign-in.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
-      body: Center(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF101010),
+              Color(0xFF020202),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            // Neon background glow
+            Positioned(
+              top: -120,
+              left: -40,
+              right: -40,
+              child: Container(
+                height: 260,
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(
+                    radius: 0.9,
+                    colors: [
+                      Color(0xFFCCFF00),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Orb + title section
+                      Container(
+                        width: 84,
+                        height: 84,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            radius: 0.6,
+                            colors: [
+                              Color(0xFFCCFF00),
+                              Color(0xFF1A1A1A),
+                            ],
+                          ),
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFFCCFF00).withOpacity(0.4),
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Welcome Back!',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Sign in to access your smart money insights.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      Container(
+                        width: size.width > 460 ? 460 : double.infinity,
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF050505).withOpacity(0.92),
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.7),
+                              blurRadius: 40,
+                              offset: const Offset(0, 22),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Email address*',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _emailController,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: 'example@gmail.com',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withOpacity(0.35),
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF111111),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFCCFF00),
+                                    width: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'Password*',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _passwordController,
+                              obscureText: _obscurePassword,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: '@Sn123hsn#',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withOpacity(0.35),
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF111111),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_off_outlined
+                                        : Icons.visibility_outlined,
+                                    color: Colors.white70,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                focusedBorder: const OutlineInputBorder(
+                                  borderRadius: BorderRadius.all(
+                                    Radius.circular(16),
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: Color(0xFFCCFF00),
+                                    width: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Checkbox(
+                                      value: _rememberMe,
+                                      activeColor: const Color(0xFFCCFF00),
+                                      onChanged: (v) {
+                                        setState(() {
+                                          _rememberMe = v ?? false;
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Text(
+                                      'Remember me',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const ForgotPasswordPage(),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text(
+                                    'Forgot Password?',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFFCCFF00),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFCCFF00),
+                                  foregroundColor: Colors.black,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                ),
+                                onPressed: _loading
+                                    ? null
+                                    : () => _handleLogin(context),
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            Colors.black,
+                                          ),
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Sign in',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            Row(
+                              children: const [
+                                Expanded(child: Divider(color: Colors.white24)),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Or continue with',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.white54,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(child: Divider(color: Colors.white24)),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _NeonSocialButton(
+                                  label: 'Google',
+                                  icon: Icons.g_mobiledata,
+                                  onTap: _googleLoading
+                                      ? null
+                                      : () => _handleGoogleSignIn(context),
+                                ),
+                                const SizedBox(width: 12),
+                                _NeonSocialButton(
+                                  label: 'Apple',
+                                  icon: Icons.apple,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SignUpPage(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          "Don't have an account? Sign up",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SignUpPage extends StatefulWidget {
+  const SignUpPage({super.key});
+
+  @override
+  State<SignUpPage> createState() => _SignUpPageState();
+}
+
+class _SignUpPageState extends State<SignUpPage> {
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleRegister(BuildContext context) async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter email and password to continue')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Registration failed')),
+      );
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Something went wrong. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF101010),
+              Color(0xFF020202),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -120,
+              left: -40,
+              right: -40,
+              child: Container(
+                height: 260,
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(
+                    radius: 0.9,
+                    colors: [
+                      Color(0xFFCCFF00),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back,
+                                color: Colors.white),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 84,
+                        height: 84,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            radius: 0.6,
+                            colors: [
+                              Color(0xFFCCFF00),
+                              Color(0xFF1A1A1A),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Create Your Account?',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Create your account to explore smart money journeys.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Container(
+                        width: size.width > 460 ? 460 : double.infinity,
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF050505).withOpacity(0.92),
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.7),
+                              blurRadius: 40,
+                              offset: const Offset(0, 22),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Full Name*',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _nameController,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: 'Alex Smith',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withOpacity(0.35),
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF111111),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                focusedBorder: const OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.all(Radius.circular(16)),
+                                  borderSide: BorderSide(
+                                    color: Color(0xFFCCFF00),
+                                    width: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'Email address*',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _emailController,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: 'example@gmail.com',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withOpacity(0.35),
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF111111),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                focusedBorder: const OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.all(Radius.circular(16)),
+                                  borderSide: BorderSide(
+                                    color: Color(0xFFCCFF00),
+                                    width: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'Password*',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _passwordController,
+                              obscureText: _obscurePassword,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: '@Sn123hsn#',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withOpacity(0.35),
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF111111),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_off_outlined
+                                        : Icons.visibility_outlined,
+                                    color: Colors.white70,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                focusedBorder: const OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.all(Radius.circular(16)),
+                                  borderSide: BorderSide(
+                                    color: Color(0xFFCCFF00),
+                                    width: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFCCFF00),
+                                  foregroundColor: Colors.black,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                ),
+                                onPressed: _loading
+                                    ? null
+                                    : () => _handleRegister(context),
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                  Colors.black),
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Register',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _NeonSocialButton(
+                                  label: 'Google',
+                                  icon: Icons.g_mobiledata,
+                                ),
+                                const SizedBox(width: 12),
+                                _NeonSocialButton(
+                                  label: 'Apple',
+                                  icon: Icons.apple,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: const Text(
+                          'Already have an account? Sign In',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ForgotPasswordPage extends StatefulWidget {
+  const ForgotPasswordPage({super.key});
+
+  @override
+  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
+}
+
+class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
+  final _emailController = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendResetEmail(BuildContext context) async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter your email address')),
+      );
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password reset email sent.')),
+      );
+      Navigator.of(context).pop();
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Failed to send reset email')),
+      );
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Something went wrong. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF101010),
+              Color(0xFF020202),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -120,
+              left: -40,
+              right: -40,
+              child: Container(
+                height: 260,
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(
+                    radius: 0.9,
+                    colors: [
+                      Color(0xFFCCFF00),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back,
+                                color: Colors.white),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 84,
+                        height: 84,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            radius: 0.6,
+                            colors: [
+                              Color(0xFFCCFF00),
+                              Color(0xFF1A1A1A),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Forgot Password?',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        "Enter your email and we'll send a reset link.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Container(
+                        width: size.width > 460 ? 460 : double.infinity,
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF050505).withOpacity(0.92),
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.7),
+                              blurRadius: 40,
+                              offset: const Offset(0, 22),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Email address*',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _emailController,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: 'example@gmail.com',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withOpacity(0.35),
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF111111),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(
+                                    color: Colors.white.withOpacity(0.12),
+                                  ),
+                                ),
+                                focusedBorder: const OutlineInputBorder(
+                                  borderRadius:
+                                      BorderRadius.all(Radius.circular(16)),
+                                  borderSide: BorderSide(
+                                    color: Color(0xFFCCFF00),
+                                    width: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFCCFF00),
+                                  foregroundColor: Colors.black,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                ),
+                                onPressed: _loading
+                                    ? null
+                                    : () => _sendResetEmail(context),
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                  Colors.black),
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Send Code',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: const Text(
+                          'Already have an account? Sign In',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NeonSocialButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _NeonSocialButton({
+    required this.label,
+    required this.icon,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SocialButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _SocialButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Icon(icon, color: color, size: 22),
+      ),
+    );
+  }
+}
+
+class GoalsPage extends StatelessWidget {
+  const GoalsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final manager = Provider.of<TransactionManager>(context, listen: false);
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Goals'),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF00F289),
+              Color(0xFF020617),
+            ],
+          ),
+        ),
+        child: StreamBuilder<List<Goal>>(
+          stream: manager.goalsStream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final goals = snapshot.data ?? [];
+            if (goals.isEmpty) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Text(
+                    'Start by creating your first financial goal – like a laptop, vacation, or emergency fund.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16.0),
+              itemCount: goals.length,
+              itemBuilder: (context, index) {
+                final goal = goals[index];
+                final progress = goal.targetAmount <= 0
+                    ? 0.0
+                    : (goal.currentAmount / goal.targetAmount).clamp(0.0, 1.0);
+                final remaining = (goal.targetAmount - goal.currentAmount)
+                    .clamp(0.0, double.infinity);
+                final now = DateTime.now();
+                final daysLeft = goal.deadline
+                    .difference(DateTime(now.year, now.month, now.day))
+                    .inDays;
+                final weeksLeft = (daysLeft / 7).clamp(1, 520).toDouble();
+                final weeklyRecommendation =
+                    remaining > 0 ? remaining / weeksLeft : 0.0;
+
+                final isCompleted = progress >= 0.999;
+                final baseOffset = 16 + index * 4.0;
+
+                return TweenAnimationBuilder<double>(
+                  tween: Tween(begin: baseOffset, end: 0),
+                  duration:
+                      Duration(milliseconds: 520 + (index.clamp(0, 6) * 40)),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) {
+                    final opacity = 1 - (value / baseOffset).clamp(0.0, 1.0);
+                    return Transform.translate(
+                      offset: Offset(0, value),
+                      child: Opacity(opacity: opacity, child: child),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: PrimaryCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  goal.name,
+                                  style: theme.textTheme.titleMedium,
+                                ),
+                              ),
+                              StatusChip(
+                                label: goal.priority,
+                                color: _priorityColor(goal.priority),
+                                icon: goal.priority.toLowerCase() == 'high'
+                                    ? Icons.whatshot_rounded
+                                    : goal.priority.toLowerCase() == 'low'
+                                        ? Icons.spa_rounded
+                                        : Icons.flag_rounded,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Target: ₹${goal.targetAmount.toStringAsFixed(0)}   •   Saved: ₹${goal.currentAmount.toStringAsFixed(0)}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Deadline: ${DateFormat('dd MMM yyyy').format(goal.deadline)}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 12),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 8,
+                              backgroundColor: Colors.grey.shade200,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isCompleted
+                                    ? const Color(0xFF43A047)
+                                    : const Color(0xFF66BB6A),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '${(progress * 100).toStringAsFixed(0)}% complete',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              if (isCompleted)
+                                AnimatedScale(
+                                  scale: 1.05,
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutBack,
+                                  child: const Text(
+                                    'Completed',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF43A047),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (!isCompleted && remaining > 0)
+                            Text(
+                              'Save about ₹${weeklyRecommendation.toStringAsFixed(0)} weekly to reach this goal on time.',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              TextButton.icon(
+                                onPressed: () {
+                                  _showAddMoneyDialog(context, manager, goal);
+                                },
+                                icon: const Icon(Icons.add_rounded),
+                                label: const Text('Add money'),
+                              ),
+                              const SizedBox(width: 8),
+                              if (isCompleted)
+                                TextButton.icon(
+                                  onPressed: () {
+                                    manager.removeGoalFromFirestore(goal.id);
+                                  },
+                                  icon: const Icon(Icons.archive_rounded),
+                                  label: const Text('Archive'),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          _showAddGoalDialog(context, manager);
+        },
+        icon: const Icon(Icons.flag_rounded),
+        label: const Text('Add goal'),
+      ),
+    );
+  }
+
+  Color _priorityColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return Colors.red;
+      case 'low':
+        return Colors.blueGrey;
+      default:
+        return Colors.orange;
+    }
+  }
+
+  void _showAddMoneyDialog(
+    BuildContext context,
+    TransactionManager manager,
+    Goal goal,
+  ) {
+    final controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Add money to goal'),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Amount (₹)',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final value = double.tryParse(controller.text.trim()) ?? 0.0;
+                if (value <= 0) {
+                  Navigator.of(ctx).pop();
+                  return;
+                }
+                final updated = goal.copyWith(
+                  currentAmount: goal.currentAmount + value,
+                );
+                await manager.updateGoalInFirestore(updated);
+                // ignore: use_build_context_synchronously
+                Navigator.of(ctx).pop();
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showAddGoalDialog(
+    BuildContext context,
+    TransactionManager manager,
+  ) {
+    final nameController = TextEditingController();
+    final targetController = TextEditingController();
+    DateTime? selectedDeadline;
+    String priority = 'Medium';
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return AlertDialog(
+              title: const Text('Create goal'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Goal title',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: targetController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Target amount (₹)',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.calendar_month_rounded),
+                      title: Text(
+                        selectedDeadline == null
+                            ? 'Pick deadline'
+                            : DateFormat('dd MMM yyyy')
+                                .format(selectedDeadline!),
+                      ),
+                      onTap: () async {
+                        final now = DateTime.now();
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: now.add(const Duration(days: 30)),
+                          firstDate: now,
+                          lastDate: now.add(const Duration(days: 365 * 5)),
+                        );
+                        if (picked != null) {
+                          setState(() {
+                            selectedDeadline = picked;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: priority,
+                      decoration: const InputDecoration(
+                        labelText: 'Priority',
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'High',
+                          child: Text('High'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Medium',
+                          child: Text('Medium'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Low',
+                          child: Text('Low'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          priority = value;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final target =
+                        double.tryParse(targetController.text.trim()) ?? 0.0;
+                    if (name.isEmpty ||
+                        target <= 0 ||
+                        selectedDeadline == null) {
+                      Navigator.of(ctx).pop();
+                      return;
+                    }
+                    final goal = Goal(
+                      id: '',
+                      name: name,
+                      targetAmount: target,
+                      currentAmount: 0,
+                      deadline: selectedDeadline!,
+                      priority: priority,
+                    );
+                    await manager.addGoalToFirestore(goal);
+                    // ignore: use_build_context_synchronously
+                    Navigator.of(ctx).pop();
+                  },
+                  child: const Text('Create'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class BillPage extends StatelessWidget {
+  const BillPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final manager = Provider.of<TransactionManager>(context, listen: false);
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Bills'),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF00F289),
+              Color(0xFF020617),
+            ],
+          ),
+        ),
+        child: StreamBuilder<List<Bill>>(
+          stream: manager.billsStream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final bills = snapshot.data ?? [];
+            if (bills.isEmpty) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Text(
+                    'Add your first bill – electricity, rent, subscriptions, EMIs and more – and never miss a due date.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
+            bills.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+            final today = DateTime.now();
+            final todayDate = DateTime(today.year, today.month, today.day);
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16.0),
+              itemCount: bills.length,
+              itemBuilder: (context, index) {
+                final bill = bills[index];
+                final dueDate = DateTime(
+                    bill.dueDate.year, bill.dueDate.month, bill.dueDate.day);
+                final diffDays = dueDate.difference(todayDate).inDays;
+                final isOverdue = !bill.isPaid && diffDays < 0;
+                final isDueSoon =
+                    !bill.isPaid && diffDays >= 0 && diffDays <= 3;
+
+                String statusText;
+                Color statusColor;
+                IconData statusIcon;
+                if (bill.isPaid) {
+                  statusText = 'Paid';
+                  statusColor = Colors.green;
+                  statusIcon = Icons.check_circle_rounded;
+                } else if (isOverdue) {
+                  statusText = 'Overdue';
+                  statusColor = Colors.red;
+                  statusIcon = Icons.warning_amber_rounded;
+                } else if (isDueSoon) {
+                  statusText = 'Due in $diffDays days';
+                  statusColor = Colors.orange;
+                  statusIcon = Icons.schedule_rounded;
+                } else {
+                  statusText = 'Upcoming';
+                  statusColor = theme.colorScheme.primary;
+                  statusIcon = Icons.calendar_today_rounded;
+                }
+
+                final baseOffset = 18 + index * 3.0;
+
+                return TweenAnimationBuilder<double>(
+                  tween: Tween(begin: baseOffset, end: 0),
+                  duration:
+                      Duration(milliseconds: 520 + (index.clamp(0, 6) * 35)),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) {
+                    final opacity = 1 - (value / baseOffset).clamp(0.0, 1.0);
+                    return Transform.translate(
+                      offset: Offset(0, value),
+                      child: Opacity(opacity: opacity, child: child),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: PrimaryCard(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: bill.isPaid
+                                ? Colors.green.shade50
+                                : Colors.blue.shade50,
+                            child: Icon(
+                              _billIconForName(bill.name),
+                              color: bill.isPaid
+                                  ? Colors.green
+                                  : theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        bill.name,
+                                        style: theme.textTheme.titleMedium,
+                                      ),
+                                    ),
+                                    StatusChip(
+                                      label: statusText,
+                                      color: statusColor,
+                                      icon: statusIcon,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '₹${bill.amount.toStringAsFixed(0)} • Due ${DateFormat('dd MMM yyyy').format(bill.dueDate)}',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  bill.repeatCycle,
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: AnimatedScale(
+                              scale: bill.isPaid ? 1.08 : 1.0,
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutBack,
+                              child: Icon(
+                                bill.isPaid
+                                    ? Icons.check_circle_rounded
+                                    : Icons.radio_button_unchecked,
+                                color: bill.isPaid ? Colors.green : Colors.grey,
+                              ),
+                            ),
+                            onPressed: () {
+                              manager.togglePaidStatusInFirestore(
+                                  bill.id, !bill.isPaid);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          _showAddBillDialog(context, manager);
+        },
+        icon: const Icon(Icons.receipt_long_rounded),
+        label: const Text('Add bill'),
+      ),
+    );
+  }
+}
+
+class AchievementsPage extends StatelessWidget {
+  const AchievementsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final manager = Provider.of<TransactionManager>(context);
+    final theme = Theme.of(context);
+    final achievements = manager.achievements;
+
+    final unlockedCount =
+        achievements.where((a) => a.isUnlocked).toList().length;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Achievements'),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF00F289),
+              Color(0xFF020617),
+            ],
+          ),
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(32.0),
+          padding: const EdgeInsets.all(16.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              const Icon(
-                Icons.account_balance_wallet,
-                size: 80,
-                color: Colors.teal,
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Welcome to Money-Mate',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87),
-              ),
-              const Text(
-                'Your personal finance manager',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-              const SizedBox(height: 48),
-              _buildSignInButton(
-                onPressed: _handleGoogleSignIn,
-                icon: FontAwesomeIcons.google,
-                label: 'Sign in with Google',
-                color: Colors.red,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                unlockedCount == 0
+                    ? 'Start tracking your money to unlock your first achievement.'
+                    : 'Great job! You have unlocked $unlockedCount achievements.',
+                style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 16),
-              _buildSignInButton(
-                onPressed: _handleFacebookSignIn,
-                icon: Icons.facebook,
-                label: 'Sign in with Facebook',
-                color: Colors.blue.shade800,
-              ),
-              const SizedBox(height: 16),
-              _buildSignInButton(
-                onPressed: _handlePhoneSignIn,
-                icon: Icons.phone,
-                label: 'Sign in with Phone Number',
-                color: Colors.teal.shade700!,
-              ),
-              const SizedBox(height: 48),
-              TextButton.icon(
-                onPressed: _signInWithBiometrics,
-                icon: const Icon(Icons.fingerprint, size: 28, color: Colors.teal),
-                label: const Text('Use Biometric Login'),
+              Expanded(
+                child: GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 4 / 3,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: achievements.length,
+                  itemBuilder: (context, index) {
+                    final a = achievements[index];
+                    final unlocked = a.isUnlocked;
+                    final baseOffset = 18 + index * 4.0;
+
+                    return TweenAnimationBuilder<double>(
+                      tween: Tween(begin: baseOffset, end: 0),
+                      duration: Duration(
+                          milliseconds: 520 + (index.clamp(0, 6) * 45)),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, value, child) {
+                        final opacity =
+                            1 - (value / baseOffset).clamp(0.0, 1.0);
+                        return Transform.translate(
+                          offset: Offset(0, value),
+                          child: Opacity(opacity: opacity, child: child),
+                        );
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOutCubic,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          gradient: unlocked
+                              ? const LinearGradient(
+                                  colors: [
+                                    Color(0xFF8E24AA),
+                                    Color(0xFFBA68C8),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : const LinearGradient(
+                                  colors: [
+                                    Color(0xFFF3F4F6),
+                                    Color(0xFFE5E7EB),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                          boxShadow: unlocked
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF8E24AA)
+                                        .withOpacity(0.35),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ]
+                              : const [],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: unlocked
+                                        ? const Color(0xFFFFC107)
+                                            .withOpacity(0.18)
+                                        : Colors.white,
+                                    child: Icon(
+                                      a.icon,
+                                      color: unlocked
+                                          ? const Color(0xFFFFC107)
+                                          : Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  AnimatedScale(
+                                    scale: unlocked ? 1.1 : 1.0,
+                                    duration: const Duration(milliseconds: 220),
+                                    curve: Curves.easeOutBack,
+                                    child: Icon(
+                                      unlocked
+                                          ? Icons.emoji_events_rounded
+                                          : Icons.lock_outline_rounded,
+                                      color: unlocked
+                                          ? const Color(0xFFFFF8E1)
+                                          : Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                a.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: unlocked
+                                      ? Colors.white
+                                      : const Color(0xFF111827),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                a.description,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: unlocked
+                                      ? Colors.white.withOpacity(0.9)
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (!unlocked)
+                                Text(
+                                  'Keep going to unlock this badge!',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -2770,31 +3214,367 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
+}
 
-  Widget _buildSignInButton({required VoidCallback onPressed, required IconData icon, required String label, required Color color}) {
-    final buttonIcon = label == 'Sign in with Google'
-        ? FaIcon(icon, color: Colors.white, size: 24.0)
-        : Icon(icon, color: Colors.white);
+class SharedWalletsPage extends StatelessWidget {
+  const SharedWalletsPage({super.key});
 
-    return SizedBox(
-      height: 50,
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: buttonIcon,
-        label: Expanded(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-            ),
+  @override
+  Widget build(BuildContext context) {
+    final manager = Provider.of<TransactionManager>(context, listen: false);
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Wallets'),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF00F289),
+              Color(0xFF020617),
+            ],
           ),
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 5,
+        child: StreamBuilder<List<SharedWallet>>(
+          stream: manager.sharedWalletsStream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final wallets = snapshot.data ?? [];
+            if (wallets.isEmpty) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: Text(
+                    'Create wallets for Cash, Bank, UPI, or Credit Card to track balances separately.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
+            final totalBalance = wallets.fold<double>(
+              0.0,
+              (sum, w) => sum + w.balance,
+            );
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16.0),
+              itemCount: wallets.length,
+              itemBuilder: (context, index) {
+                final w = wallets[index];
+                final share = totalBalance <= 0
+                    ? 0.0
+                    : (w.balance / totalBalance).clamp(0.0, 1.0);
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: PrimaryCard(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor:
+                              const Color(0xFF3949AB).withOpacity(0.08),
+                          child: Icon(
+                            _walletIconForName(w.name),
+                            color: const Color(0xFF3949AB),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      w.name,
+                                      style: theme.textTheme.titleMedium,
+                                    ),
+                                  ),
+                                  Text(
+                                    '₹${w.balance.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${w.members.length} member${w.members.length == 1 ? '' : 's'}',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              const SizedBox(height: 8),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: LinearProgressIndicator(
+                                  value: share,
+                                  minHeight: 6,
+                                  backgroundColor: Colors.grey.shade200,
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF3949AB),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'transfer') {
+                              _showTransferDialog(context, manager, wallets, w);
+                            } else if (value == 'delete') {
+                              manager.removeSharedWalletFromFirestore(w.id);
+                            }
+                          },
+                          itemBuilder: (ctx) => const [
+                            PopupMenuItem(
+                              value: 'transfer',
+                              child: Text('Transfer'),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          _showAddWalletDialog(context, manager);
+        },
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add wallet'),
+      ),
+    );
+  }
+}
+
+class AddTransactionOptionsPage extends StatelessWidget {
+  const AddTransactionOptionsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Add Transaction')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (ctx) => const AddTransactionPage(
+                      initialType: TransactionType.income,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.arrow_downward_rounded),
+              label: const Text('Add Income'),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (ctx) => const AddTransactionPage(
+                      initialType: TransactionType.expense,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.arrow_upward_rounded),
+              label: const Text('Add Expense'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AddTransactionPage extends StatefulWidget {
+  final TransactionType initialType;
+
+  const AddTransactionPage({super.key, required this.initialType});
+
+  @override
+  State<AddTransactionPage> createState() => _AddTransactionPageState();
+}
+
+class _AddTransactionPageState extends State<AddTransactionPage> {
+  final _amountController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  DateTime _selectedDate = DateTime.now();
+  late ExpenseCategory _selectedCategory;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategory = ExpenseCategory.values.first;
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    final manager = Provider.of<TransactionManager>(context, listen: false);
+
+    final rawAmount = _amountController.text.trim().replaceAll(',', '');
+    final amount = double.tryParse(rawAmount) ?? 0.0;
+    if (amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid amount.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+    });
+
+    try {
+      await manager.addTransactionRaw(
+        amount: amount,
+        category: _selectedCategory.name,
+        type: widget.initialType.name,
+        date: _selectedDate,
+        description: _descriptionController.text.trim(),
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isIncome = widget.initialType == TransactionType.income;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(isIncome ? 'Add Income' : 'Add Expense'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _amountController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Amount (₹)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<ExpenseCategory>(
+              value: _selectedCategory,
+              decoration: const InputDecoration(
+                labelText: 'Category',
+              ),
+              items: ExpenseCategory.values
+                  .map(
+                    (c) => DropdownMenuItem(
+                      value: c,
+                      child: Text(c.name),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
+                  _selectedCategory = value;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.calendar_today_rounded),
+              title: Text(DateFormat('dd MMM yyyy').format(_selectedDate)),
+              onTap: _pickDate,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text('Save'),
+              ),
+            ),
+          ],
         ),
       ),
     );
