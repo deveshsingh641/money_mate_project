@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
 
 import '../models/transaction.dart';
@@ -32,22 +33,32 @@ class TransactionManager extends ChangeNotifier {
     _listenToChallenges();
   }
 
+  String? get _currentUserId => FirebaseAuth.instance.currentUser?.uid;
+
   // --- Transactions Stream (Dynamic) ---
   Stream<List<Transaction>> get transactionsStream {
+    final uid = _currentUserId;
     return _transactionsCollection
         .orderBy('date', descending: true)
         .snapshots()
         .map((QuerySnapshot snapshot) {
-      return snapshot.docs
-          .map<Transaction>(
-            (doc) => transactionFromFirestore(doc as DocumentSnapshot),
-          )
-          .toList();
+      return snapshot.docs.where((doc) {
+        if (uid == null) return false;
+        final data = doc.data() as Map<String, dynamic>;
+        final docUserId = data['userId'] as String?;
+        return docUserId == uid;
+      }).map<Transaction>((doc) {
+        return transactionFromFirestore(doc as DocumentSnapshot);
+      }).toList();
     });
   }
 
   Future<void> addTransaction(Transaction transaction) {
+    final uid = _currentUserId;
+    if (uid == null) return Future.value();
+
     return _transactionsCollection.add({
+      'userId': uid,
       'amount': transaction.amount,
       'category': transaction.category.name,
       'type': transaction.type.name,
@@ -65,7 +76,11 @@ class TransactionManager extends ChangeNotifier {
     required DateTime date,
     required String description,
   }) {
+    final uid = _currentUserId;
+    if (uid == null) return Future.value();
+
     return _transactionsCollection.add({
+      'userId': uid,
       'amount': amount,
       'category': category,
       'type': type,
@@ -252,8 +267,14 @@ class TransactionManager extends ChangeNotifier {
   // Firestore-backed goals
 
   Stream<List<Goal>> get goalsStream {
+    final uid = _currentUserId;
     return _goalsCollection.snapshots().map((snapshot) {
-      return snapshot.docs.map<Goal>((doc) {
+      return snapshot.docs.where((doc) {
+        if (uid == null) return false;
+        final data = doc.data() as Map<String, dynamic>;
+        final docUserId = data['userId'] as String?;
+        return docUserId == uid;
+      }).map<Goal>((doc) {
         final data = doc.data() as Map<String, dynamic>;
         return Goal(
           id: doc.id,
@@ -269,7 +290,11 @@ class TransactionManager extends ChangeNotifier {
   }
 
   Future<void> addGoalToFirestore(Goal goal) {
+    final uid = _currentUserId;
+    if (uid == null) return Future.value();
+
     return _goalsCollection.add({
+      'userId': uid,
       'name': goal.name,
       'targetAmount': goal.targetAmount,
       'currentAmount': goal.currentAmount,
@@ -321,8 +346,14 @@ class TransactionManager extends ChangeNotifier {
   // Firestore-backed bills
 
   Stream<List<Bill>> get billsStream {
+    final uid = _currentUserId;
     return _billsCollection.snapshots().map((snapshot) {
-      return snapshot.docs.map<Bill>((doc) {
+      return snapshot.docs.where((doc) {
+        if (uid == null) return false;
+        final data = doc.data() as Map<String, dynamic>;
+        final docUserId = data['userId'] as String?;
+        return docUserId == uid;
+      }).map<Bill>((doc) {
         final data = doc.data() as Map<String, dynamic>;
         return Bill(
           id: doc.id,
@@ -337,7 +368,11 @@ class TransactionManager extends ChangeNotifier {
   }
 
   Future<void> addBillToFirestore(Bill bill) {
+    final uid = _currentUserId;
+    if (uid == null) return Future.value();
+
     return _billsCollection.add({
+      'userId': uid,
       'name': bill.name,
       'amount': bill.amount,
       'dueDate': Timestamp.fromDate(bill.dueDate),
@@ -360,8 +395,18 @@ class TransactionManager extends ChangeNotifier {
     return _billsCollection.doc(id).delete();
   }
 
-  Future<void> togglePaidStatusInFirestore(String billId, bool isPaid) {
-    return _billsCollection.doc(billId).update({'isPaid': isPaid});
+  Future<void> togglePaidStatusInFirestore(String billId, bool isPaid) async {
+    await _billsCollection.doc(billId).update({'isPaid': isPaid});
+
+    if (isPaid) {
+      final paidSnapshot =
+          await _billsCollection.where('isPaid', isEqualTo: true).get();
+      final paidCount = paidSnapshot.size;
+
+      if (paidCount >= 3) {
+        unlockAchievement('a4');
+      }
+    }
   }
 
   // Achievements
@@ -526,8 +571,14 @@ class TransactionManager extends ChangeNotifier {
   // Firestore-backed shared wallets
 
   Stream<List<SharedWallet>> get sharedWalletsStream {
+    final uid = _currentUserId;
     return _sharedWalletsCollection.snapshots().map((snapshot) {
-      return snapshot.docs.map<SharedWallet>((doc) {
+      return snapshot.docs.where((doc) {
+        if (uid == null) return false;
+        final data = doc.data() as Map<String, dynamic>;
+        final docUserId = data['userId'] as String?;
+        return docUserId == uid;
+      }).map<SharedWallet>((doc) {
         final data = doc.data() as Map<String, dynamic>;
         final members = (data['members'] as List<dynamic>?)
                 ?.map((e) => e.toString())
@@ -544,7 +595,11 @@ class TransactionManager extends ChangeNotifier {
   }
 
   Future<void> addSharedWalletToFirestore(SharedWallet wallet) {
+    final uid = _currentUserId;
+    if (uid == null) return Future.value();
+
     return _sharedWalletsCollection.add({
+      'userId': uid,
       'name': wallet.name,
       'members': wallet.members,
       'balance': wallet.balance,

@@ -12,6 +12,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
 
 import 'dart:math' as math;
 
@@ -28,6 +31,7 @@ import 'providers/transaction_manager.dart';
 import 'screens/dashboard/dashboard_content.dart';
 import 'widgets/primary_card.dart';
 import 'widgets/status_chip.dart';
+import 'services/secure_auth_storage.dart';
 
 class ThemeManager extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.light;
@@ -42,6 +46,260 @@ class ThemeManager extends ChangeNotifier {
 
   void toggleTheme(bool isDark) {
     setThemeMode(isDark ? ThemeMode.dark : ThemeMode.light);
+  }
+}
+
+class SetupPinScreen extends StatefulWidget {
+  const SetupPinScreen({super.key});
+
+  @override
+  State<SetupPinScreen> createState() => _SetupPinScreenState();
+}
+
+class _SetupPinScreenState extends State<SetupPinScreen> {
+  final TextEditingController _pinController = TextEditingController();
+  final TextEditingController _confirmController = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _pinController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _savePin() async {
+    final pin = _pinController.text.trim();
+    final confirm = _confirmController.text.trim();
+
+    if (pin.length != 4 || confirm.length != 4 || pin != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter matching 4-digit PINs')),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await SecureAuthStorage.savePin(pin);
+      await SecureAuthStorage.setOnboarded();
+
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to save PIN. Please try again.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    return Scaffold(
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF101010),
+              Color(0xFF020202),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -120,
+              left: -40,
+              right: -40,
+              child: Container(
+                height: 260,
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(
+                    radius: 0.9,
+                    colors: [
+                      Color(0xFFCCFF00),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 84,
+                        height: 84,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            radius: 0.6,
+                            colors: [
+                              Color(0xFFCCFF00),
+                              Color(0xFF1A1A1A),
+                            ],
+                          ),
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFFCCFF00).withOpacity(0.4),
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Set a 4-digit PIN',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'This PIN will be used along with biometrics to quickly unlock Money-Mate on this device.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Container(
+                        width: size.width > 460 ? 460 : double.infinity,
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF050505).withOpacity(0.92),
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.7),
+                              blurRadius: 40,
+                              offset: const Offset(0, 22),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'PIN',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _pinController,
+                              maxLength: 4,
+                              keyboardType: TextInputType.number,
+                              obscureText: true,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                counterText: '',
+                                hintText: '••••',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withOpacity(0.35),
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF111111),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'Confirm PIN',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _confirmController,
+                              maxLength: 4,
+                              keyboardType: TextInputType.number,
+                              obscureText: true,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                counterText: '',
+                                hintText: '••••',
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withOpacity(0.35),
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF111111),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFCCFF00),
+                                  foregroundColor: Colors.black,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                ),
+                                onPressed: _saving ? null : _savePin,
+                                child: _saving
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            Colors.black,
+                                          ),
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Save PIN',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -185,21 +443,36 @@ class MyApp extends StatelessWidget {
               brightness: Brightness.dark,
             ),
           ),
-          home: StreamBuilder<User?>(
-            stream: FirebaseAuth.instance.authStateChanges(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (snapshot.hasData) {
-                return const HomeScreen();
-              }
-              return const LoginPage();
-            },
-          ),
+          home: const AuthGate(),
         );
+      },
+    );
+  }
+}
+
+/// Decides which top-level screen to show based on Firebase auth state.
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.userChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final user = snapshot.data;
+        if (user == null) {
+          // Not authenticated: show first-time neon login for now.
+          return const LoginPage();
+        }
+
+        // Authenticated: go to Home.
+        return const HomeScreen();
       },
     );
   }
@@ -809,6 +1082,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await ref.putFile(File(picked.path));
       final url = await ref.getDownloadURL();
       await user.updatePhotoURL(url);
+      await user.reload();
       setState(() {
         _photoUrl = url;
       });
@@ -837,6 +1111,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       await user.updateDisplayName(_nameController.text.trim());
+      await user.reload();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated')),
@@ -871,8 +1146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final message =
           'Check out Money-Mate! It helps you track your money, goals and bills easily.\n'
-          'Use my referral code: $code when you sign up.\n'
-          'Download: https://play.google.com/store/apps/details?id=com.example.money_mate';
+          'Use my referral code: $code when you sign up.';
 
       await Share.share(message, subject: 'Try Money-Mate');
     } finally {
@@ -1054,12 +1328,233 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onTap: () async {
               await FirebaseAuth.instance.signOut();
               if (!mounted) return;
-              Navigator.of(context).popUntil((route) => route.isFirst);
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+                (route) => false,
+              );
             },
+          ),
+          const SizedBox(height: 28),
+          const Text(
+            'Data & Privacy',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.download_rounded,
+            title: 'Export Data',
+            subtitle: 'Download your transaction history as CSV',
+            trailing: _sharing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.chevron_right_rounded),
+            onTap: _exportData,
+          ),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.picture_as_pdf_rounded,
+            title: 'Export as PDF',
+            subtitle: 'Generate a PDF report of your transactions',
+            trailing: _sharing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.chevron_right_rounded),
+            onTap: _exportDataPdf,
+          ),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.delete_forever_rounded,
+            title: 'Delete Account',
+            subtitle: 'Permanently delete your account and data',
+            iconColor: Colors.redAccent,
+            textColor: Colors.redAccent,
+            onTap: _deleteAccount,
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _exportData() async {
+    setState(() => _sharing = true);
+    try {
+      final manager = Provider.of<TransactionManager>(context, listen: false);
+      final transactions = await manager.transactionsStream.first;
+
+      // Build CSV content with header row
+      final buffer = StringBuffer();
+      buffer.writeln('Date,Category,Type,Amount,Description');
+      for (final t in transactions) {
+        final date = DateFormat('yyyy-MM-dd HH:mm').format(t.date);
+        final safeDescription = t.description.replaceAll('"', '""');
+        buffer.writeln(
+          '$date,${t.category.name},${t.type.name},${t.amount},"$safeDescription"',
+        );
+      }
+
+      final csvData = buffer.toString();
+
+      // Write CSV file to app documents directory
+      final directory = await getApplicationDocumentsDirectory();
+      final filePath = '${directory.path}/money_mate_export.csv';
+      final file = File(filePath);
+      await file.writeAsString(csvData);
+
+      // Share the CSV file so it opens in Excel or any spreadsheet app
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        subject: 'Money-Mate Transaction History',
+        text:
+            'Your Money-Mate data export is attached as an Excel-compatible CSV file.',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to export data')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _sharing = false);
+      }
+    }
+  }
+
+  Future<void> _exportDataPdf() async {
+    setState(() => _sharing = true);
+    try {
+      final manager = Provider.of<TransactionManager>(context, listen: false);
+      final transactions = await manager.transactionsStream.first;
+
+      final pdf = pw.Document();
+
+      final tableHeaders = [
+        'Date',
+        'Category',
+        'Type',
+        'Amount (₹)',
+        'Description',
+      ];
+
+      final tableData = transactions.map((t) {
+        return [
+          DateFormat('yyyy-MM-dd HH:mm').format(t.date),
+          t.category.name,
+          t.type.name,
+          t.amount.toStringAsFixed(2),
+          t.description,
+        ];
+      }).toList();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(24),
+          build: (context) => [
+            pw.Text(
+              'Money-Mate Transaction Report',
+              style: pw.TextStyle(
+                fontSize: 20,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.SizedBox(height: 8),
+            pw.Text(
+              'Generated on: ' +
+                  DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+            pw.SizedBox(height: 16),
+            pw.Table.fromTextArray(
+              headers: tableHeaders,
+              data: tableData,
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+              ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.black,
+              ),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellAlignment: pw.Alignment.centerLeft,
+              headerAlignment: pw.Alignment.centerLeft,
+              cellPadding:
+                  const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            ),
+          ],
+        ),
+      );
+
+      final bytes = await pdf.save();
+      final directory = await getApplicationDocumentsDirectory();
+      final filePath = '${directory.path}/money_mate_report.pdf';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes, flush: true);
+
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        subject: 'Money-Mate Transaction Report (PDF)',
+        text:
+            'Your Money-Mate PDF report is attached. You can view or share this summary of your transactions.',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to export PDF report')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _sharing = false);
+      }
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Account?'),
+        content: const Text(
+            'This will permanently delete your account. This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          await user.delete();
+          // AuthGate will handle navigation
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting account: $e')),
+          );
+        }
+      }
+    }
   }
 }
 
@@ -1116,6 +1611,8 @@ class _SettingsTile extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
+  final Color? iconColor;
+  final Color? textColor;
 
   const _SettingsTile({
     required this.icon,
@@ -1123,13 +1620,20 @@ class _SettingsTile extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.onTap,
+    this.iconColor,
+    this.textColor,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
+      leading: Icon(icon, color: iconColor),
+      title: Text(
+        title,
+        style: textColor != null
+            ? TextStyle(color: textColor, fontWeight: FontWeight.w600)
+            : const TextStyle(fontWeight: FontWeight.w600),
+      ),
       subtitle: subtitle != null ? Text(subtitle!) : null,
       trailing: trailing ?? const Icon(Icons.chevron_right_rounded),
       onTap: onTap,
@@ -1329,6 +1833,19 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  @override
+  void initState() {
+    super.initState();
+    // If user is already signed in, offer biometric unlock immediately
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // Delay slightly so context is ready before showing system UI
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _navigateWithBiometrics(context);
+      });
+    }
+  }
+
   Future<void> _navigateWithBiometrics(BuildContext context) async {
     bool allowBiometric = false;
     try {
@@ -1346,10 +1863,12 @@ class _LoginPageState extends State<LoginPage> {
 
     if (!mounted) return;
 
-    // Even if biometrics fail or are unavailable, fall back to normal navigation
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (ctx) => const HomeScreen()),
-    );
+    // Only navigate when biometric auth actually succeeds
+    if (allowBiometric) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (ctx) => const HomeScreen()),
+      );
+    }
   }
 
   Future<void> _handleLogin(BuildContext context) async {
@@ -1369,7 +1888,18 @@ class _LoginPageState extends State<LoginPage> {
         email: email,
         password: password,
       );
-      await _navigateWithBiometrics(context);
+      if (!mounted) return;
+
+      // If no PIN set on this device yet, ask user to set one, otherwise go home
+      final hasPin = await SecureAuthStorage.hasPin();
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (ctx) =>
+              hasPin ? const HomeScreen() : const SetupPinScreen(),
+        ),
+      );
     } on FirebaseAuthException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message ?? 'Login failed')),
@@ -1401,7 +1931,16 @@ class _LoginPageState extends State<LoginPage> {
 
       await FirebaseAuth.instance.signInWithCredential(credential);
       if (!mounted) return;
-      await _navigateWithBiometrics(context);
+
+      final hasPin = await SecureAuthStorage.hasPin();
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (ctx) =>
+              hasPin ? const HomeScreen() : const SetupPinScreen(),
+        ),
+      );
     } on FirebaseAuthException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message ?? 'Google sign-in failed')),
@@ -1420,6 +1959,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final hasSignedInUser = FirebaseAuth.instance.currentUser != null;
 
     return Scaffold(
       body: Container(
@@ -1523,6 +2063,19 @@ class _LoginPageState extends State<LoginPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (hasSignedInUser)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.fingerprint_rounded,
+                                    color: Color(0xFFCCFF00),
+                                  ),
+                                  tooltip: 'Login with biometrics',
+                                  onPressed: () =>
+                                      _navigateWithBiometrics(context),
+                                ),
+                              ),
                             const Text(
                               'Email address*',
                               style: TextStyle(

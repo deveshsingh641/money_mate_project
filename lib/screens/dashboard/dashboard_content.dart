@@ -120,6 +120,35 @@ class DashboardContent extends StatelessWidget {
 
           const SizedBox(height: 16),
 
+          // Monthly spending trend (last 6 months)
+          _buildSectionTitle('Monthly Spending Trend'),
+          StreamBuilder<List<Transaction>>(
+            stream: manager.transactionsStream,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  !snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final txs = snapshot.data ?? [];
+              return TweenAnimationBuilder<double>(
+                tween: Tween(begin: 28, end: 0),
+                duration: const Duration(milliseconds: 650),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, child) {
+                  final opacity = 1 - (value / 28).clamp(0.0, 1.0);
+                  return Transform.translate(
+                    offset: Offset(0, value),
+                    child: Opacity(opacity: opacity, child: child),
+                  );
+                },
+                child: _buildMonthlySpendingTrendCard(txs),
+              );
+            },
+          ),
+
+          const SizedBox(height: 16),
+
           // Spending breakdown (categories) + insights
           _buildSectionTitle('Spending Breakdown'),
           StreamBuilder<Map<ExpenseCategory, double>>(
@@ -402,44 +431,7 @@ class DashboardContent extends StatelessWidget {
                               Colors.white.withOpacity(hasStreak ? 0.18 : 0.1),
                         ),
                       ),
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          // soft glow behind the flame
-                          Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.orange.withOpacity(0.55),
-                                  blurRadius: 12,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                          ),
-                          // back flame layer (darker, slightly lower)
-                          Transform.translate(
-                            offset: const Offset(0, 1.2),
-                            child: Icon(
-                              Icons.local_fire_department,
-                              size: 20,
-                              color: const Color(0xFFFFA000).withOpacity(0.95),
-                            ),
-                          ),
-                          // front flame highlight (brighter, slightly up)
-                          Transform.translate(
-                            offset: const Offset(0, -0.6),
-                            child: const Icon(
-                              Icons.local_fire_department,
-                              size: 18,
-                              color: Color(0xFFFFF3E0),
-                            ),
-                          ),
-                        ],
-                      ),
+                      const _AnimatedFlame(),
                     ],
                   ),
                 ),
@@ -635,6 +627,141 @@ class DashboardContent extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMonthlySpendingTrendCard(List<Transaction> txs) {
+    // Aggregate last 6 months of expenses
+    final now = DateTime.now();
+    final List<_MonthlySpending> months = [];
+
+    for (int i = 5; i >= 0; i--) {
+      final monthDate = DateTime(now.year, now.month - i, 1);
+      if (monthDate.isAfter(now)) continue;
+      final total = txs
+          .where((t) =>
+              t.type == TransactionType.expense &&
+              t.date.year == monthDate.year &&
+              t.date.month == monthDate.month)
+          .fold<double>(0.0, (sum, t) => sum + t.amount);
+      months.add(_MonthlySpending(month: monthDate, total: total));
+    }
+
+    // If all zero, show friendly empty state
+    final hasAny = months.any((m) => m.total > 0);
+    if (!hasAny) {
+      return const Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(20)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text(
+            'Once you start adding expenses, your monthly spending trend will appear here.',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
+    final maxValue =
+        months.fold<double>(0.0, (max, m) => m.total > max ? m.total : max);
+    final formatter =
+        NumberFormat.compactCurrency(locale: 'en_IN', symbol: '₹');
+
+    return Builder(
+      builder: (context) {
+        final theme = Theme.of(context);
+        return Card(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Last 6 months',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 140,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      for (final m in months)
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              // Amount label
+                              Text(
+                                m.total == 0 ? '-' : formatter.format(m.total),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontSize: 10,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.7),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 6),
+                              // Bar
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: Container(
+                                    width: 18,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.bottomCenter,
+                                        end: Alignment.topCenter,
+                                        colors: [
+                                          const Color(0xFFEF4444)
+                                              .withOpacity(0.95),
+                                          const Color(0xFFF97316)
+                                              .withOpacity(0.85),
+                                        ],
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFFEF4444)
+                                              .withOpacity(0.35),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    height: maxValue == 0
+                                        ? 0
+                                        : (m.total / maxValue) * 100 + 12,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                DateFormat('MMM').format(m.month),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.75),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1271,6 +1398,103 @@ class DashboardContent extends StatelessWidget {
     }
 
     return Icons.category_rounded;
+  }
+}
+
+class _MonthlySpending {
+  final DateTime month;
+  final double total;
+
+  _MonthlySpending({required this.month, required this.total});
+}
+
+class _AnimatedFlame extends StatefulWidget {
+  const _AnimatedFlame();
+
+  @override
+  State<_AnimatedFlame> createState() => _AnimatedFlameState();
+}
+
+class _AnimatedFlameState extends State<_AnimatedFlame>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+  late final Animation<double> _offsetY;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
+
+    _scale = Tween<double>(begin: 0.92, end: 1.05).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+
+    _offsetY = Tween<double>(begin: 1.5, end: -1.2).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, _offsetY.value),
+          child: Transform.scale(
+            scale: _scale.value,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // soft glow behind the flame
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.orange.withOpacity(0.65),
+                        blurRadius: 14,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                ),
+                // back flame layer (darker core)
+                Transform.translate(
+                  offset: const Offset(0, 1.0),
+                  child: Icon(
+                    Icons.local_fire_department,
+                    size: 20,
+                    color: const Color(0xFFFF6D00).withOpacity(0.95),
+                  ),
+                ),
+                // bright highlight
+                Transform.translate(
+                  offset: const Offset(0, -0.4),
+                  child: const Icon(
+                    Icons.local_fire_department,
+                    size: 16,
+                    color: Color(0xFFFFF8E1),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
