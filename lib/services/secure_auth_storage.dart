@@ -33,6 +33,16 @@ class SecureAuthStorage {
     return v == 'true';
   }
 
+  static const _accentThemeKey = 'accent_theme';
+
+  static Future<void> saveAccentTheme(String themeName) async {
+    await _storage.write(key: _accentThemeKey, value: themeName);
+  }
+
+  static Future<String?> getAccentTheme() async {
+    return await _storage.read(key: _accentThemeKey);
+  }
+
   static String _hashPin(String pin) {
     final bytes = utf8.encode(pin);
     final digest = sha256.convert(bytes);

@@ -1,15 +1,22 @@
 import 'dart:ui';
+import 'dart:io';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../models/transaction.dart';
 import '../../models/bill.dart';
 import '../../models/goal.dart';
 import '../../providers/transaction_manager.dart';
-import '../../main.dart' show AddTransactionPage, AddTransactionOptionsPage;
+import '../../main.dart' show AddTransactionPage, AddTransactionOptionsPage, ThemeManager, AccentTheme;
+import '../wealth_ai_screen.dart' show WealthAIScreen;
 
 class DashboardContent extends StatelessWidget {
   const DashboardContent({super.key});
@@ -771,10 +778,110 @@ class DashboardContent extends StatelessWidget {
     );
   }
 
+  Future<void> _exportStatementPdf(BuildContext context, TransactionManager manager) async {
+    try {
+      final transactions = await manager.transactionsStream.first;
+      final pdf = pw.Document();
+
+      final tableHeaders = [
+        'Date',
+        'Category',
+        'Type',
+        'Amount (Rs)',
+        'Description',
+      ];
+
+      final tableData = transactions.map((t) {
+        return [
+          DateFormat('yyyy-MM-dd HH:mm').format(t.date),
+          t.category.name,
+          t.type.name,
+          t.amount.toStringAsFixed(2),
+          t.description,
+        ];
+      }).toList();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(24),
+          build: (pw.Context context) => [
+            pw.Header(
+              level: 0,
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Money-Mate Transaction Report',
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.teal800,
+                    ),
+                  ),
+                  pw.Text(
+                    'Balance Summary',
+                    style: pw.TextStyle(
+                      fontSize: 12,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 12),
+            pw.Text(
+              'Generated on: ' + DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+            ),
+            pw.SizedBox(height: 20),
+            pw.Table.fromTextArray(
+              headers: tableHeaders,
+              data: tableData,
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+              ),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.teal,
+              ),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellAlignment: pw.Alignment.centerLeft,
+              headerAlignment: pw.Alignment.centerLeft,
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            ),
+          ],
+        ),
+      );
+
+      final bytes = await pdf.save();
+      final directory = await getApplicationDocumentsDirectory();
+      final filePath = '${directory.path}/money_mate_statement.pdf';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes, flush: true);
+
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        subject: 'Money-Mate Transaction Report (PDF)',
+        text: 'Your Money-Mate PDF statement report is attached.',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to export PDF statement')),
+        );
+      }
+    }
+  }
+
   Widget _buildBalanceCard(BuildContext context, double balance) {
     final bool isNegative = balance < 0;
     final String balanceText =
         NumberFormat.currency(symbol: '₹').format(balance.abs());
+    final manager = Provider.of<TransactionManager>(context, listen: false);
+    final themeManager = Provider.of<ThemeManager>(context);
+    final primaryColor = themeManager.accentTheme.primaryColor;
+    final secondaryColor = themeManager.accentTheme.loginColor;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -792,8 +899,8 @@ class DashboardContent extends StatelessWidget {
                         const Color(0xFFF57C00).withOpacity(0.85),
                       ]
                     : [
-                        const Color(0xFF1E88E5).withOpacity(0.95),
-                        const Color(0xFF42A5F5).withOpacity(0.9),
+                        primaryColor.withOpacity(0.95),
+                        secondaryColor.withOpacity(0.85),
                       ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -803,15 +910,13 @@ class DashboardContent extends StatelessWidget {
                 width: 1.2,
               ),
               boxShadow: [
-                // main directional shadow for strong 3D depth
                 BoxShadow(
                   color: Colors.black.withOpacity(0.20),
                   blurRadius: 26,
                   offset: const Offset(0, 18),
                 ),
-                // soft ambient shadow to keep edges smooth on light backgrounds
                 BoxShadow(
-                  color: const Color(0xFF1E88E5).withOpacity(0.35),
+                  color: primaryColor.withOpacity(0.35),
                   blurRadius: 32,
                   spreadRadius: -4,
                   offset: const Offset(0, 6),
@@ -823,13 +928,46 @@ class DashboardContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Total Balance',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withOpacity(0.85),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Total Balance',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withOpacity(0.85),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          HapticFeedback.mediumImpact();
+                          _exportStatementPdf(context, manager);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: Row(
+                            children: const [
+                              Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 14),
+                              SizedBox(width: 4),
+                              Text(
+                                'Export PDF',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   Row(
@@ -917,9 +1055,20 @@ class DashboardContent extends StatelessWidget {
                           ),
                         ],
                       ),
-                      Icon(
-                        Icons.analytics_outlined,
-                        color: Colors.white.withOpacity(0.9),
+                      IconButton(
+                        icon: Icon(
+                          Icons.auto_awesome_rounded,
+                          color: primaryColor,
+                        ),
+                        tooltip: 'Wealth AI Advisor',
+                        onPressed: () {
+                          HapticFeedback.mediumImpact();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const WealthAIScreen(),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
